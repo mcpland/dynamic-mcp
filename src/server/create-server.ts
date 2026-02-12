@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import { DisabledDynamicToolExecutionEngine, type DynamicToolExecutionEngine } from '../dynamic/executor.js';
+import { DockerDynamicToolExecutionEngine } from '../dynamic/docker-executor.js';
 import { DynamicToolRegistry } from '../dynamic/registry.js';
 import { DynamicToolService } from '../dynamic/service.js';
 
@@ -41,7 +41,16 @@ export interface CreateMcpServerOptions {
     maxTools: number;
     adminToken?: string;
   };
-  dynamicExecutionEngine?: DynamicToolExecutionEngine;
+  sandbox: {
+    dockerBinary: string;
+    memoryLimit: string;
+    cpuLimit: string;
+    maxDependencies: number;
+    maxOutputBytes: number;
+    maxTimeoutMs: number;
+    allowedImages: string[];
+    blockedPackages: string[];
+  };
 }
 
 export async function createMcpServer(options: CreateMcpServerOptions): Promise<McpServer> {
@@ -213,10 +222,11 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
     maxTools: options.dynamic.maxTools
   });
 
+  const executionEngine = new DockerDynamicToolExecutionEngine(options.sandbox);
   const dynamicService = new DynamicToolService({
     server,
     registry,
-    executionEngine: options.dynamicExecutionEngine ?? new DisabledDynamicToolExecutionEngine(),
+    executionEngine,
     adminToken: options.dynamic.adminToken
   });
   await dynamicService.initialize();

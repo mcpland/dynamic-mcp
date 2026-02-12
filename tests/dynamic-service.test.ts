@@ -25,6 +25,16 @@ describe('dynamic tool service', () => {
       dynamic: {
         storeFilePath: join(storeRoot, 'tools.json'),
         maxTools: 10
+      },
+      sandbox: {
+        dockerBinary: 'docker',
+        memoryLimit: '512m',
+        cpuLimit: '1',
+        maxDependencies: 8,
+        maxOutputBytes: 200_000,
+        maxTimeoutMs: 60_000,
+        allowedImages: ['node:lts-slim'],
+        blockedPackages: []
       }
     });
     const client = new Client({ name: 'test-client', version: '1.0.0' });

@@ -15,6 +15,16 @@ export interface RuntimeConfig {
     maxTools: number;
     adminToken?: string;
   };
+  sandbox: {
+    dockerBinary: string;
+    memoryLimit: string;
+    cpuLimit: string;
+    maxDependencies: number;
+    maxOutputBytes: number;
+    maxTimeoutMs: number;
+    allowedImages: string[];
+    blockedPackages: string[];
+  };
 }
 
 type ArgMap = Record<string, string>;
@@ -34,6 +44,14 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
     args['dynamic-max-tools'] ?? env.MCP_DYNAMIC_MAX_TOOLS ?? '256'
   );
   const adminToken = normalizeOptionalString(args['admin-token'] ?? env.MCP_ADMIN_TOKEN);
+  const allowedImages = splitCsv(
+    args['sandbox-allowed-images'] ?? env.MCP_SANDBOX_ALLOWED_IMAGES ?? 'node:lts-slim'
+  );
+  const blockedPackages = splitCsv(
+    args['sandbox-blocked-packages'] ??
+      env.MCP_SANDBOX_BLOCKED_PACKAGES ??
+      'child_process,node-pty,npm,pm2'
+  );
 
   return {
     transport,
@@ -46,6 +64,28 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
       storeFilePath,
       maxTools,
       ...(adminToken ? { adminToken } : {})
+    },
+    sandbox: {
+      dockerBinary: args['docker-bin'] ?? env.MCP_SANDBOX_DOCKER_BIN ?? 'docker',
+      memoryLimit: args['sandbox-memory'] ?? env.MCP_SANDBOX_MEMORY_LIMIT ?? '512m',
+      cpuLimit: args['sandbox-cpu'] ?? env.MCP_SANDBOX_CPU_LIMIT ?? '1',
+      maxDependencies: parsePositiveInteger(
+        args['sandbox-max-dependencies'] ?? env.MCP_SANDBOX_MAX_DEPENDENCIES ?? '32',
+        'MCP sandbox max dependencies',
+        256
+      ),
+      maxOutputBytes: parsePositiveInteger(
+        args['sandbox-max-output-bytes'] ?? env.MCP_SANDBOX_MAX_OUTPUT_BYTES ?? '200000',
+        'MCP sandbox max output bytes',
+        10_000_000
+      ),
+      maxTimeoutMs: parsePositiveInteger(
+        args['sandbox-max-timeout-ms'] ?? env.MCP_SANDBOX_MAX_TIMEOUT_MS ?? '120000',
+        'MCP sandbox max timeout',
+        300_000
+      ),
+      allowedImages,
+      blockedPackages
     }
   };
 }
@@ -122,6 +162,15 @@ function parseDynamicToolLimit(value: string): number {
   return parsed;
 }
 
+function parsePositiveInteger(value: string, label: string, max: number): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > max) {
+    throw new Error(`Invalid ${label} "${value}". Expected 1-${max}.`);
+  }
+
+  return parsed;
+}
+
 function normalizeOptionalString(value: string | undefined): string | undefined {
   if (!value) {
     return undefined;
@@ -129,4 +178,11 @@ function normalizeOptionalString(value: string | undefined): string | undefined 
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function splitCsv(value: string): string[] {
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
 }

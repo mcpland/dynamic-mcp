@@ -12,6 +12,8 @@ describe('loadRuntimeConfig', () => {
     expect(config.http.path).toBe('/mcp');
     expect(config.dynamic.storeFilePath.endsWith('.dynamic-mcp/tools.json')).toBe(true);
     expect(config.dynamic.maxTools).toBe(256);
+    expect(config.sandbox.memoryLimit).toBe('512m');
+    expect(config.sandbox.allowedImages).toEqual(['node:lts-slim']);
   });
 
   it('reads CLI flags and normalizes path', () => {
@@ -24,7 +26,9 @@ describe('loadRuntimeConfig', () => {
         '--dynamic-max-tools',
         '12',
         '--admin-token',
-        'secret-token'
+        'secret-token',
+        '--sandbox-allowed-images',
+        'node:lts-slim,node:22-alpine'
       ],
       {}
     );
@@ -33,6 +37,7 @@ describe('loadRuntimeConfig', () => {
     expect(config.http.path).toBe('/gateway');
     expect(config.dynamic.maxTools).toBe(12);
     expect(config.dynamic.adminToken).toBe('secret-token');
+    expect(config.sandbox.allowedImages).toEqual(['node:lts-slim', 'node:22-alpine']);
   });
 
   it('rejects invalid transport', () => {

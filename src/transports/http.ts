@@ -25,6 +25,16 @@ interface HttpServerOptions {
     maxTools: number;
     adminToken?: string;
   };
+  sandbox: {
+    dockerBinary: string;
+    memoryLimit: string;
+    cpuLimit: string;
+    maxDependencies: number;
+    maxOutputBytes: number;
+    maxTimeoutMs: number;
+    allowedImages: string[];
+    blockedPackages: string[];
+  };
 }
 
 interface Session {
@@ -69,7 +79,7 @@ export async function startHttpTransport(
   };
 
   const createSessionTransport = async (): Promise<StreamableHTTPServerTransport> => {
-    const server = await createMcpServer({ dynamic: options.dynamic });
+    const server = await createMcpServer({ dynamic: options.dynamic, sandbox: options.sandbox });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (sessionId) => {
