@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 
 import { buildCreatedRecord, buildUpdatedRecord } from './record-utils.js';
 import type { DynamicToolRegistryPort } from './registry-port.js';
+import { retryAsync } from '../lib/retry.js';
 import {
   DynamicToolCreateSchema,
   DynamicToolRecordSchema,
@@ -14,18 +15,24 @@ export interface PostgresDynamicToolRegistryOptions {
   pool: Pool;
   maxTools: number;
   schema: string;
+  initMaxAttempts: number;
+  initBackoffMs: number;
 }
 
 export class PostgresDynamicToolRegistry implements DynamicToolRegistryPort {
   private readonly pool: Pool;
   private readonly maxTools: number;
   private readonly schema: string;
+  private readonly initMaxAttempts: number;
+  private readonly initBackoffMs: number;
   private loaded = false;
 
   constructor(options: PostgresDynamicToolRegistryOptions) {
     this.pool = options.pool;
     this.maxTools = options.maxTools;
     this.schema = assertValidIdentifier(options.schema);
+    this.initMaxAttempts = options.initMaxAttempts;
+    this.initBackoffMs = options.initBackoffMs;
   }
 
   async load(): Promise<void> {
@@ -33,22 +40,31 @@ export class PostgresDynamicToolRegistry implements DynamicToolRegistryPort {
       return;
     }
 
-    await this.pool.query(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`);
-    await this.pool.query(`
-      CREATE TABLE IF NOT EXISTS ${this.schema}.dynamic_tools (
-        name TEXT PRIMARY KEY,
-        title TEXT,
-        description TEXT NOT NULL,
-        image TEXT NOT NULL,
-        timeout_ms INTEGER NOT NULL,
-        dependencies JSONB NOT NULL,
-        code TEXT NOT NULL,
-        enabled BOOLEAN NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL,
-        updated_at TIMESTAMPTZ NOT NULL,
-        revision INTEGER NOT NULL
-      )
-    `);
+    await retryAsync(
+      async () => {
+        await this.pool.query(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`);
+        await this.pool.query(`
+          CREATE TABLE IF NOT EXISTS ${this.schema}.dynamic_tools (
+            name TEXT PRIMARY KEY,
+            title TEXT,
+            description TEXT NOT NULL,
+            image TEXT NOT NULL,
+            timeout_ms INTEGER NOT NULL,
+            dependencies JSONB NOT NULL,
+            code TEXT NOT NULL,
+            enabled BOOLEAN NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL,
+            revision INTEGER NOT NULL
+          )
+        `);
+      },
+      {
+        maxAttempts: this.initMaxAttempts,
+        baseDelayMs: this.initBackoffMs,
+        shouldRetry: isRetriablePgInitError
+      }
+    );
 
     this.loaded = true;
   }
@@ -275,3 +291,47 @@ async function buildRevisionConflictOrNotFound(
 
   return new Error(`Revision conflict for dynamic tool "${name}".`);
 }
+
+function isRetriablePgInitError(error: unknown): boolean {
+  const code = (error as { code?: unknown })?.code;
+  if (typeof code === 'string') {
+    if (retriableSqlState.has(code)) {
+      return true;
+    }
+
+    if (retriableNodeErrorCodes.has(code)) {
+      return true;
+    }
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  return retriableMessagePatterns.some((pattern) => pattern.test(message));
+}
+
+const retriableSqlState = new Set([
+  '57P01', // admin_shutdown
+  '57P02', // crash_shutdown
+  '57P03', // cannot_connect_now
+  '53300', // too_many_connections
+  '08000',
+  '08001',
+  '08003',
+  '08004',
+  '08006',
+  '08007',
+  '08P01'
+]);
+
+const retriableNodeErrorCodes = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'ETIMEDOUT'
+]);
+
+const retriableMessagePatterns = [
+  /connection terminated/i,
+  /failed to connect/i,
+  /timeout/i
+];

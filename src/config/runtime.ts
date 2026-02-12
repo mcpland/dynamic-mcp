@@ -18,6 +18,8 @@ export interface RuntimeConfig {
     postgres?: {
       connectionString: string;
       schema: string;
+      initMaxAttempts: number;
+      initBackoffMs: number;
     };
   };
   sandbox: {
@@ -79,6 +81,16 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
   const postgresSchema =
     normalizeOptionalString(args['dynamic-pg-schema'] ?? env.MCP_DYNAMIC_PG_SCHEMA) ??
     'dynamic_mcp';
+  const postgresInitMaxAttempts = parsePositiveInteger(
+    args['dynamic-pg-init-max-attempts'] ?? env.MCP_DYNAMIC_PG_INIT_MAX_ATTEMPTS ?? '10',
+    'MCP postgres init max attempts',
+    100
+  );
+  const postgresInitBackoffMs = parsePositiveInteger(
+    args['dynamic-pg-init-backoff-ms'] ?? env.MCP_DYNAMIC_PG_INIT_BACKOFF_MS ?? '1000',
+    'MCP postgres init backoff ms',
+    60_000
+  );
   const allowedImages = splitCsv(
     args['sandbox-allowed-images'] ?? env.MCP_SANDBOX_ALLOWED_IMAGES ?? 'node:lts-slim'
   );
@@ -101,7 +113,9 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
       maxTools,
       adminToken,
       postgresConnectionString,
-      postgresSchema
+      postgresSchema,
+      postgresInitMaxAttempts,
+      postgresInitBackoffMs
     }),
     sandbox: {
       dockerBinary: args['docker-bin'] ?? env.MCP_SANDBOX_DOCKER_BIN ?? 'docker',
@@ -335,6 +349,8 @@ function loadDynamicConfig(params: {
   adminToken?: string;
   postgresConnectionString?: string;
   postgresSchema: string;
+  postgresInitMaxAttempts: number;
+  postgresInitBackoffMs: number;
 }): RuntimeConfig['dynamic'] {
   const base = {
     backend: params.backend,
@@ -356,7 +372,9 @@ function loadDynamicConfig(params: {
     ...base,
     postgres: {
       connectionString,
-      schema: params.postgresSchema
+      schema: params.postgresSchema,
+      initMaxAttempts: params.postgresInitMaxAttempts,
+      initBackoffMs: params.postgresInitBackoffMs
     }
   };
 }

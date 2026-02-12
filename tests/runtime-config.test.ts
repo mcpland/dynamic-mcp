@@ -91,12 +91,33 @@ describe('loadRuntimeConfig', () => {
       'postgres://postgres:postgres@localhost:5432/dynamic_mcp'
     );
     expect(config.dynamic.postgres?.schema).toBe('mcp_runtime');
+    expect(config.dynamic.postgres?.initMaxAttempts).toBe(10);
+    expect(config.dynamic.postgres?.initBackoffMs).toBe(1000);
   });
 
   it('requires postgres URL when postgres backend is selected', () => {
     expect(() => loadRuntimeConfig(['--dynamic-backend', 'postgres'], {})).toThrow(
       /MCP_DYNAMIC_PG_URL/
     );
+  });
+
+  it('loads postgres init retry settings', () => {
+    const config = loadRuntimeConfig(
+      [
+        '--dynamic-backend',
+        'postgres',
+        '--dynamic-pg-url',
+        'postgres://postgres:postgres@localhost:5432/dynamic_mcp',
+        '--dynamic-pg-init-max-attempts',
+        '4',
+        '--dynamic-pg-init-backoff-ms',
+        '25'
+      ],
+      {}
+    );
+
+    expect(config.dynamic.postgres?.initMaxAttempts).toBe(4);
+    expect(config.dynamic.postgres?.initBackoffMs).toBe(25);
   });
 
   it('loads audit rotation config values', () => {

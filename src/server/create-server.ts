@@ -50,6 +50,8 @@ export interface CreateMcpServerOptions {
     postgres?: {
       connectionString: string;
       schema: string;
+      initMaxAttempts: number;
+      initBackoffMs: number;
     };
   };
   sandbox: {
@@ -344,7 +346,9 @@ function buildDynamicToolRegistry(
     return new PostgresDynamicToolRegistry({
       pool: getSharedPostgresPool(dynamic.postgres.connectionString),
       maxTools: dynamic.maxTools,
-      schema: dynamic.postgres.schema
+      schema: dynamic.postgres.schema,
+      initMaxAttempts: dynamic.postgres.initMaxAttempts,
+      initBackoffMs: dynamic.postgres.initBackoffMs
     });
   }
 

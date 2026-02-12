@@ -32,6 +32,8 @@ interface HttpServerOptions {
     postgres?: {
       connectionString: string;
       schema: string;
+      initMaxAttempts: number;
+      initBackoffMs: number;
     };
   };
   sandbox: {
