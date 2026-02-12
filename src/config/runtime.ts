@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { config as loadDotEnv } from 'dotenv';
 
 export type TransportMode = 'stdio' | 'http';
@@ -8,6 +9,11 @@ export interface RuntimeConfig {
     host: string;
     port: number;
     path: string;
+  };
+  dynamic: {
+    storeFilePath: string;
+    maxTools: number;
+    adminToken?: string;
   };
 }
 
@@ -21,6 +27,13 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
   const host = args.host ?? env.MCP_HOST ?? '127.0.0.1';
   const portValue = args.port ?? env.MCP_PORT ?? env.PORT ?? '8788';
   const pathValue = args.path ?? env.MCP_PATH ?? '/mcp';
+  const storeFilePath = resolve(
+    args['dynamic-store'] ?? env.MCP_DYNAMIC_STORE ?? '.dynamic-mcp/tools.json'
+  );
+  const maxTools = parseDynamicToolLimit(
+    args['dynamic-max-tools'] ?? env.MCP_DYNAMIC_MAX_TOOLS ?? '256'
+  );
+  const adminToken = normalizeOptionalString(args['admin-token'] ?? env.MCP_ADMIN_TOKEN);
 
   return {
     transport,
@@ -28,6 +41,11 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
       host,
       port: parsePort(portValue),
       path: normalizePath(pathValue)
+    },
+    dynamic: {
+      storeFilePath,
+      maxTools,
+      ...(adminToken ? { adminToken } : {})
     }
   };
 }
@@ -93,4 +111,22 @@ function normalizePath(value: string): string {
   }
 
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+}
+
+function parseDynamicToolLimit(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 10_000) {
+    throw new Error(`Invalid MCP dynamic max tool limit "${value}". Expected 1-10000.`);
+  }
+
+  return parsed;
+}
+
+function normalizeOptionalString(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
