@@ -246,6 +246,66 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
   });
   await dynamicService.initialize();
 
+  server.registerResource(
+    'guard.metrics',
+    'dynamic://metrics/guard',
+    {
+      title: 'Guard Metrics',
+      description: 'Runtime metrics for global tool execution guard',
+      mimeType: 'application/json'
+    },
+    async (uri) => {
+      const payload = executionGuard.snapshot();
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: 'application/json',
+            text: JSON.stringify(payload, null, 2)
+          }
+        ]
+      };
+    }
+  );
+
+  server.registerTool(
+    'system.guard_metrics',
+    {
+      title: 'Guard Metrics',
+      description: 'Get guard concurrency/rate-limit counters',
+      outputSchema: z.object({
+        activeExecutions: z.number().int().nonnegative(),
+        limits: z.object({
+          maxConcurrency: z.number().int().positive(),
+          maxCallsPerWindow: z.number().int().positive(),
+          windowMs: z.number().int().positive()
+        }),
+        scopes: z.array(
+          z.object({
+            scope: z.string(),
+            total: z.number().int().nonnegative(),
+            allowed: z.number().int().nonnegative(),
+            rejectedRate: z.number().int().nonnegative(),
+            rejectedConcurrency: z.number().int().nonnegative(),
+            failed: z.number().int().nonnegative()
+          })
+        )
+      })
+    },
+    async () => {
+      const payload = executionGuard.snapshot();
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(payload)
+          }
+        ],
+        structuredContent: payload
+      };
+    }
+  );
+
   registerSessionSandboxTools(server, {
     dockerBinary: options.sandbox.dockerBinary,
     memoryLimit: options.sandbox.memoryLimit,

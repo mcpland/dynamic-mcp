@@ -22,27 +22,7 @@ describe('dynamic tool service', () => {
   it('creates and registers dynamic tools at runtime', async () => {
     const storeRoot = await mkdtemp(join(tmpdir(), 'dynamic-mcp-service-test-'));
     const server = await createMcpServer({
-      dynamic: {
-        storeFilePath: join(storeRoot, 'tools.json'),
-        maxTools: 10
-      },
-      sandbox: {
-        dockerBinary: 'docker',
-        memoryLimit: '512m',
-        cpuLimit: '1',
-        maxDependencies: 8,
-        maxOutputBytes: 200_000,
-        maxTimeoutMs: 60_000,
-        allowedImages: ['node:lts-slim'],
-        blockedPackages: [],
-        sessionTimeoutSeconds: 1_800,
-        maxSessions: 20
-      },
-      security: {
-        toolMaxConcurrency: 8,
-        toolMaxCallsPerWindow: 1000,
-        toolRateWindowMs: 60_000
-      }
+      ...buildServerConfig(storeRoot)
     });
     const client = new Client({ name: 'test-client', version: '1.0.0' });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -80,4 +60,63 @@ describe('dynamic tool service', () => {
     expect(runResult.isError).toBe(true);
     expect(runResult.content[0]?.type).toBe('text');
   });
+
+  it('enforces admin token for privileged dynamic tools when configured', async () => {
+    const storeRoot = await mkdtemp(join(tmpdir(), 'dynamic-mcp-service-auth-test-'));
+    const server = await createMcpServer({
+      ...buildServerConfig(storeRoot),
+      dynamic: {
+        storeFilePath: join(storeRoot, 'tools.json'),
+        maxTools: 10,
+        adminToken: 'top-secret'
+      }
+    });
+    const client = new Client({ name: 'test-client', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    openedServers.push(server);
+    openedClients.push(client);
+
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    const unauthorized = await client.callTool({
+      name: 'dynamic.tool.list',
+      arguments: {}
+    });
+    expect(unauthorized.isError).toBe(true);
+
+    const authorized = await client.callTool({
+      name: 'dynamic.tool.list',
+      arguments: {
+        adminToken: 'top-secret'
+      }
+    });
+    expect(authorized.isError).not.toBe(true);
+  });
 });
+
+function buildServerConfig(storeRoot: string) {
+  return {
+    dynamic: {
+      storeFilePath: join(storeRoot, 'tools.json'),
+      maxTools: 10
+    },
+    sandbox: {
+      dockerBinary: 'docker',
+      memoryLimit: '512m',
+      cpuLimit: '1',
+      maxDependencies: 8,
+      maxOutputBytes: 200_000,
+      maxTimeoutMs: 60_000,
+      allowedImages: ['node:lts-slim'],
+      blockedPackages: [],
+      sessionTimeoutSeconds: 1_800,
+      maxSessions: 20
+    },
+    security: {
+      toolMaxConcurrency: 8,
+      toolMaxCallsPerWindow: 1000,
+      toolRateWindowMs: 60_000
+    }
+  };
+}

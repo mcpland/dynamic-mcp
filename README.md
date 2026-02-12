@@ -1,21 +1,40 @@
 # dynamic-mcp
 
-A production-oriented MCP server template built on top of the official TypeScript SDK.
+A production-oriented **dynamic MCP server** in Node.js, with secure Docker sandbox execution and runtime tool management.
 
-## Why this repo
+## Core capabilities
 
-- Uses official `@modelcontextprotocol/sdk` APIs.
-- Supports both `stdio` (local clients) and Streamable HTTP (remote clients).
-- Includes strict TypeScript, linting, tests, CI, and Docker deployment.
+- Dynamic tool control plane (`dynamic.tool.*`):
+  - `dynamic.tool.create`
+  - `dynamic.tool.update`
+  - `dynamic.tool.delete`
+  - `dynamic.tool.list`
+  - `dynamic.tool.get`
+  - `dynamic.tool.enable`
+- Dynamic tool runtime execution in isolated Docker containers.
+- Reusable sandbox sessions:
+  - `sandbox.initialize`
+  - `sandbox.exec`
+  - `sandbox.run_js`
+  - `sandbox.stop`
+  - `sandbox.session.list`
+- Global execution guard (concurrency + rate limit).
+- Guard metrics resource/tool:
+  - resource: `dynamic://metrics/guard`
+  - tool: `system.guard_metrics`
 
-## Stack
+## Security model
 
-- Node.js `>=20`
-- TypeScript
-- MCP SDK: `@modelcontextprotocol/sdk`
-- Validation: `zod`
-- Testing: `vitest`
-- Lint/format: `eslint` + `prettier`
+- Docker isolation for code execution.
+- Restricted container profile:
+  - `--read-only`
+  - `--cap-drop ALL`
+  - `--security-opt no-new-privileges`
+  - `--pids-limit`
+  - CPU/memory limits
+- Optional admin token (`MCP_ADMIN_TOKEN`) for dangerous operations.
+- Allowlist/denylist controls for images and npm packages.
+- Runtime guard for anti-abuse throttling.
 
 ## Quick start
 
@@ -24,22 +43,58 @@ npm install
 npm run dev:stdio
 ```
 
-For HTTP mode:
+HTTP mode:
 
 ```bash
 npm run dev:http
 ```
 
-Default HTTP endpoint: `http://127.0.0.1:8788/mcp`
+Default endpoint: `http://127.0.0.1:8788/mcp`
 
 ## Environment variables
 
 See `.env.example`.
 
-- `MCP_TRANSPORT`: `stdio` or `http`
-- `MCP_HOST`: HTTP bind host
-- `MCP_PORT`: HTTP bind port
-- `MCP_PATH`: HTTP MCP route
+Key vars:
+
+- `MCP_TRANSPORT`
+- `MCP_DYNAMIC_STORE`
+- `MCP_DYNAMIC_MAX_TOOLS`
+- `MCP_ADMIN_TOKEN`
+- `MCP_SANDBOX_ALLOWED_IMAGES`
+- `MCP_SANDBOX_BLOCKED_PACKAGES`
+- `MCP_SANDBOX_MEMORY_LIMIT`
+- `MCP_SANDBOX_CPU_LIMIT`
+- `MCP_TOOL_MAX_CONCURRENCY`
+- `MCP_TOOL_MAX_CALLS_PER_WINDOW`
+- `MCP_TOOL_RATE_WINDOW_MS`
+
+## Dynamic tool code contract
+
+`dynamic.tool.create` stores `code` as an async function body. At execution time it runs inside:
+
+```js
+export async function run(args) {
+  // your code body
+}
+```
+
+Inside code, return any JSON-serializable value.
+
+Example code body:
+
+```js
+const { text } = args;
+return { upper: String(text).toUpperCase() };
+```
+
+Then invoke the tool with:
+
+```json
+{
+  "args": { "text": "hello" }
+}
+```
 
 ## Scripts
 
@@ -51,55 +106,14 @@ See `.env.example`.
 - `npm run build`
 - `npm run typecheck`
 
-## Built-in MCP capabilities
+## CI and Docker
 
-Tools:
+- CI: `.github/workflows/ci.yml`
+- Dockerfile: `Dockerfile`
 
-- `system.health`
-- `dev.echo`
-- `time.now`
-
-Resource:
-
-- `dynamic://service/meta`
-
-Prompt:
-
-- `tool-call-checklist`
-
-## Claude Desktop (stdio) example
-
-Use the built output in your MCP config:
-
-```json
-{
-  "mcpServers": {
-    "dynamic-mcp": {
-      "command": "node",
-      "args": ["/absolute/path/to/dynamic-mcp/dist/index.js", "--transport", "stdio"]
-    }
-  }
-}
-```
-
-## HTTP deployment
-
-Local run:
-
-```bash
-MCP_TRANSPORT=http MCP_HOST=127.0.0.1 MCP_PORT=8788 MCP_PATH=/mcp npm run dev
-```
-
-Docker:
+Run container:
 
 ```bash
 docker build -t dynamic-mcp:latest .
 docker run --rm -p 8788:8788 dynamic-mcp:latest
 ```
-
-## Engineering checklist
-
-- CI pipeline on Node 20/22
-- Strict TS compile
-- Integration test with in-memory MCP transport
-- Session-aware Streamable HTTP implementation

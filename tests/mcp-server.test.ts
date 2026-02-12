@@ -55,6 +55,7 @@ describe('createMcpServer', () => {
     const toolNames = tools.tools.map((tool) => tool.name);
 
     expect(toolNames).toContain('system.health');
+    expect(toolNames).toContain('system.guard_metrics');
     expect(toolNames).toContain('dev.echo');
     expect(toolNames).toContain('time.now');
     expect(toolNames).toContain('sandbox.initialize');
