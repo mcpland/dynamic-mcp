@@ -11,6 +11,7 @@ import {
 } from './spec.js';
 import type { DynamicToolCreate, DynamicToolRecord, DynamicToolUpdate } from './spec.js';
 import type { ToolExecutionGuard } from '../security/guard.js';
+import type { AuditLogger } from '../audit/logger.js';
 
 const DynamicInvocationSchema = z.object({
   args: z.record(z.string(), z.unknown()).default({})
@@ -54,6 +55,7 @@ export interface DynamicToolServiceOptions {
   registry: DynamicToolRegistry;
   executionEngine: DynamicToolExecutionEngine;
   executionGuard: ToolExecutionGuard;
+  auditLogger?: AuditLogger;
   adminToken?: string;
 }
 
@@ -62,6 +64,7 @@ export class DynamicToolService {
   private readonly registry: DynamicToolRegistry;
   private readonly executionEngine: DynamicToolExecutionEngine;
   private readonly executionGuard: ToolExecutionGuard;
+  private readonly auditLogger?: AuditLogger;
   private readonly adminToken?: string;
   private readonly runtimeToolHandles = new Map<string, RegisteredTool>();
 
@@ -70,6 +73,7 @@ export class DynamicToolService {
     this.registry = options.registry;
     this.executionEngine = options.executionEngine;
     this.executionGuard = options.executionGuard;
+    this.auditLogger = options.auditLogger;
     this.adminToken = options.adminToken;
   }
 
@@ -157,6 +161,12 @@ export class DynamicToolService {
             const created = await this.registry.create(tool);
             await this.applyRuntimeTool(created);
             this.server.sendToolListChanged();
+            void this.auditLogger?.log({
+              action: 'dynamic.tool.create',
+              actor: 'admin',
+              target: created.name,
+              result: 'success'
+            });
 
             const view = this.toToolView(created, false);
             return {
@@ -188,6 +198,12 @@ export class DynamicToolService {
             const updated = await this.registry.update(name, patch);
             await this.applyRuntimeTool(updated);
             this.server.sendToolListChanged();
+            void this.auditLogger?.log({
+              action: 'dynamic.tool.update',
+              actor: 'admin',
+              target: updated.name,
+              result: 'success'
+            });
 
             const view = this.toToolView(updated, false);
             return {
@@ -227,6 +243,13 @@ export class DynamicToolService {
               };
             }
 
+            void this.auditLogger?.log({
+              action: 'dynamic.tool.delete',
+              actor: 'admin',
+              target: name,
+              result: 'success'
+            });
+
             return {
               content: [textItem(`Deleted dynamic tool: ${name}`)]
             };
@@ -253,6 +276,12 @@ export class DynamicToolService {
             const updated = await this.registry.setEnabled(name, enabled);
             await this.applyRuntimeTool(updated);
             this.server.sendToolListChanged();
+            void this.auditLogger?.log({
+              action: enabled ? 'dynamic.tool.enable' : 'dynamic.tool.disable',
+              actor: 'admin',
+              target: name,
+              result: 'success'
+            });
 
             return {
               content: [textItem(`${enabled ? 'Enabled' : 'Disabled'} dynamic tool: ${name}`)],
@@ -349,6 +378,14 @@ export class DynamicToolService {
     try {
       return await this.executionGuard.run(scope, work);
     } catch (error) {
+      void this.auditLogger?.log({
+        action: scope,
+        actor: 'system',
+        result: 'error',
+        details: {
+          message: error instanceof Error ? error.message : String(error)
+        }
+      });
       return toErrorResult(error);
     }
   }

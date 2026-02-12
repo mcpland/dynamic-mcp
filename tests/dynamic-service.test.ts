@@ -6,6 +6,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { AuditLogger } from '../src/audit/logger.js';
 import { createMcpServer } from '../src/server/create-server.js';
 
 const openedClients: Client[] = [];
@@ -117,6 +118,17 @@ function buildServerConfig(storeRoot: string) {
       toolMaxConcurrency: 8,
       toolMaxCallsPerWindow: 1000,
       toolRateWindowMs: 60_000
-    }
+    },
+    auditLogger: createTestAuditLogger()
   };
+}
+
+function createTestAuditLogger(): AuditLogger {
+  return new AuditLogger({
+    enabled: false,
+    filePath: '/tmp/dynamic-mcp-test-audit.log',
+    maxEventBytes: 10_000,
+    service: 'dynamic-mcp-test',
+    serviceVersion: 'test'
+  });
 }

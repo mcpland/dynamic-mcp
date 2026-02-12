@@ -9,6 +9,7 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import type { Request, Response } from 'express';
 
 import { JwtAuthVerifier } from '../auth/jwt.js';
+import type { AuditLogger } from '../audit/logger.js';
 import { createMcpServer } from '../server/create-server.js';
 
 export interface HttpTransportConfig {
@@ -53,6 +54,7 @@ interface HttpServerOptions {
       requiredScopes: string[];
     };
   };
+  auditLogger: AuditLogger;
 }
 
 interface Session {
@@ -110,7 +112,8 @@ export async function startHttpTransport(
     const server = await createMcpServer({
       dynamic: options.dynamic,
       sandbox: options.sandbox,
-      security: options.security
+      security: options.security,
+      auditLogger: options.auditLogger
     });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
@@ -134,7 +137,7 @@ export async function startHttpTransport(
   };
 
   const postHandler = async (req: Request, res: Response): Promise<void> => {
-    if (!(await authenticate(req, res, jwtVerifier))) {
+    if (!(await authenticate(req, res, jwtVerifier, options.auditLogger))) {
       return;
     }
 
@@ -165,7 +168,7 @@ export async function startHttpTransport(
   };
 
   const getHandler = async (req: Request, res: Response): Promise<void> => {
-    if (!(await authenticate(req, res, jwtVerifier))) {
+    if (!(await authenticate(req, res, jwtVerifier, options.auditLogger))) {
       return;
     }
 
@@ -189,7 +192,7 @@ export async function startHttpTransport(
   };
 
   const deleteHandler = async (req: Request, res: Response): Promise<void> => {
-    if (!(await authenticate(req, res, jwtVerifier))) {
+    if (!(await authenticate(req, res, jwtVerifier, options.auditLogger))) {
       return;
     }
 
@@ -232,7 +235,8 @@ export async function startHttpTransport(
 async function authenticate(
   req: Request,
   res: Response,
-  verifier: JwtAuthVerifier | null
+  verifier: JwtAuthVerifier | null,
+  auditLogger: AuditLogger
 ): Promise<boolean> {
   if (!verifier) {
     return true;
@@ -241,18 +245,36 @@ async function authenticate(
   const authorization = req.headers.authorization;
   if (!authorization || !authorization.startsWith('Bearer ')) {
     sendJsonRpcError(res, 401, -32001, 'Unauthorized: missing bearer token.');
+    void auditLogger.log({
+      action: 'http.auth',
+      actor: req.ip,
+      result: 'denied',
+      details: { reason: 'missing_bearer' }
+    });
     return false;
   }
 
   const token = authorization.slice('Bearer '.length).trim();
   if (token.length === 0) {
     sendJsonRpcError(res, 401, -32001, 'Unauthorized: empty bearer token.');
+    void auditLogger.log({
+      action: 'http.auth',
+      actor: req.ip,
+      result: 'denied',
+      details: { reason: 'empty_bearer' }
+    });
     return false;
   }
 
   try {
     const authInfo = await verifier.verifyAccessToken(token);
     (req as Request & { auth?: AuthInfo }).auth = authInfo;
+    void auditLogger.log({
+      action: 'http.auth',
+      actor: authInfo.clientId,
+      result: 'success',
+      details: { scopes: authInfo.scopes }
+    });
     return true;
   } catch (error) {
     sendJsonRpcError(
@@ -261,6 +283,12 @@ async function authenticate(
       -32002,
       error instanceof Error ? `Forbidden: ${error.message}` : 'Forbidden: invalid token.'
     );
+    void auditLogger.log({
+      action: 'http.auth',
+      actor: req.ip,
+      result: 'denied',
+      details: { reason: error instanceof Error ? error.message : String(error) }
+    });
     return false;
   }
 }

@@ -7,6 +7,7 @@ import { DynamicToolRegistry } from '../dynamic/registry.js';
 import { DynamicToolService } from '../dynamic/service.js';
 import { registerSessionSandboxTools } from '../sandbox/register-session-tools.js';
 import { ToolExecutionGuard } from '../security/guard.js';
+import type { AuditLogger } from '../audit/logger.js';
 
 const serviceVersion = '0.2.0';
 
@@ -60,6 +61,7 @@ export interface CreateMcpServerOptions {
     toolMaxCallsPerWindow: number;
     toolRateWindowMs: number;
   };
+  auditLogger: AuditLogger;
 }
 
 export async function createMcpServer(options: CreateMcpServerOptions): Promise<McpServer> {
@@ -242,7 +244,8 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
     registry,
     executionEngine,
     adminToken: options.dynamic.adminToken,
-    executionGuard
+    executionGuard,
+    auditLogger: options.auditLogger
   });
   await dynamicService.initialize();
 
@@ -318,7 +321,8 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
     sessionTimeoutSeconds: options.sandbox.sessionTimeoutSeconds,
     maxSessions: options.sandbox.maxSessions,
     adminToken: options.dynamic.adminToken,
-    executionGuard
+    executionGuard,
+    auditLogger: options.auditLogger
   });
 
   return server;

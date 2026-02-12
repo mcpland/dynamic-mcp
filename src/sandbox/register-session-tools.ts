@@ -9,6 +9,7 @@ import { z } from 'zod';
 
 import { DynamicDependencySchema } from '../dynamic/spec.js';
 import type { ToolExecutionGuard } from '../security/guard.js';
+import type { AuditLogger } from '../audit/logger.js';
 import { ensureDockerAvailable, runDocker } from './docker.js';
 import { sanitizeContainerId, sanitizeDockerImage, sanitizeShellCommand } from './policy.js';
 import { SandboxSessionRegistry } from './session-registry.js';
@@ -26,6 +27,7 @@ export interface SessionSandboxOptions {
   maxSessions: number;
   adminToken?: string;
   executionGuard: ToolExecutionGuard;
+  auditLogger?: AuditLogger;
 }
 
 const sessionRegistry = new SandboxSessionRegistry();
@@ -157,6 +159,13 @@ export function registerSessionSandboxTools(server: McpServer, options: SessionS
           },
           options.maxSessions
         );
+        void options.auditLogger?.log({
+          action: 'sandbox.initialize',
+          actor: 'admin',
+          target: sessionId,
+          result: 'success',
+          details: { image: chosenImage }
+        });
 
         return {
           content: [
@@ -210,6 +219,13 @@ export function registerSessionSandboxTools(server: McpServer, options: SessionS
         }
 
         sessionRegistry.touch(sessionId);
+        void options.auditLogger?.log({
+          action: 'sandbox.exec',
+          actor: 'admin',
+          target: sessionId,
+          result: 'success',
+          details: { commandCount: commands.length }
+        });
 
         return {
           content: [
@@ -272,6 +288,13 @@ export function registerSessionSandboxTools(server: McpServer, options: SessionS
           );
 
           sessionRegistry.touch(sessionId);
+          void options.auditLogger?.log({
+            action: 'sandbox.run_js',
+            actor: 'admin',
+            target: sessionId,
+            result: 'success',
+            details: { dependencies: dependencies.length }
+          });
 
           const output = clipText(
             `${stdout}${stderr ? `\n${stderr}` : ''}`.trim(),
@@ -315,6 +338,12 @@ export function registerSessionSandboxTools(server: McpServer, options: SessionS
         });
 
         sessionRegistry.remove(sanitized);
+        void options.auditLogger?.log({
+          action: 'sandbox.stop',
+          actor: 'admin',
+          target: sanitized,
+          result: 'success'
+        });
         return {
           content: [
             {
@@ -424,6 +453,12 @@ async function guardedRun(
   try {
     return await options.executionGuard.run(scope, work);
   } catch (error) {
+    void options.auditLogger?.log({
+      action: scope,
+      actor: 'system',
+      result: 'error',
+      details: { message: error instanceof Error ? error.message : String(error) }
+    });
     return errorResult(error);
   }
 }

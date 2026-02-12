@@ -41,6 +41,11 @@ export interface RuntimeConfig {
       requiredScopes: string[];
     };
   };
+  audit: {
+    enabled: boolean;
+    filePath: string;
+    maxEventBytes: number;
+  };
 }
 
 type ArgMap = Record<string, string>;
@@ -133,6 +138,16 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
       )
     },
     auth: loadAuthConfig(args, env)
+    ,
+    audit: {
+      enabled: parseBoolean(args['audit-enabled'] ?? env.MCP_AUDIT_ENABLED ?? 'true'),
+      filePath: resolve(args['audit-file'] ?? env.MCP_AUDIT_FILE ?? '.dynamic-mcp/audit.log'),
+      maxEventBytes: parsePositiveInteger(
+        args['audit-max-event-bytes'] ?? env.MCP_AUDIT_MAX_EVENT_BYTES ?? '20000',
+        'MCP audit max event bytes',
+        1_000_000
+      )
+    }
   };
 }
 
@@ -231,6 +246,19 @@ function splitCsv(value: string): string[] {
     .split(',')
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
+}
+
+function parseBoolean(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+
+  throw new Error(`Invalid boolean value "${value}".`);
 }
 
 function loadAuthConfig(args: ArgMap, env: NodeJS.ProcessEnv): RuntimeConfig['auth'] {

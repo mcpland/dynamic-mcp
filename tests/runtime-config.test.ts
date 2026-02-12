@@ -19,6 +19,8 @@ describe('loadRuntimeConfig', () => {
     expect(config.security.toolMaxConcurrency).toBe(8);
     expect(config.security.toolRateWindowMs).toBe(60000);
     expect(config.auth.mode).toBe('none');
+    expect(config.audit.enabled).toBe(true);
+    expect(config.audit.filePath.endsWith('.dynamic-mcp/audit.log')).toBe(true);
   });
 
   it('reads CLI flags and normalizes path', () => {

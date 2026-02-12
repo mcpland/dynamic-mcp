@@ -5,10 +5,11 @@ import { mkdtemp } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
+import { AuditLogger } from '../src/audit/logger.js';
 import { createMcpServer } from '../src/server/create-server.js';
 
 const openedClients: Client[] = [];
-const openedServers: ReturnType<typeof createMcpServer>[] = [];
+const openedServers: Awaited<ReturnType<typeof createMcpServer>>[] = [];
 
 afterEach(async () => {
   await Promise.all(openedClients.map((client) => client.close()));
@@ -41,7 +42,8 @@ describe('createMcpServer', () => {
         toolMaxConcurrency: 8,
         toolMaxCallsPerWindow: 1000,
         toolRateWindowMs: 60_000
-      }
+      },
+      auditLogger: createTestAuditLogger()
     });
     const client = new Client({ name: 'test-client', version: '1.0.0' });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -78,3 +80,13 @@ describe('createMcpServer', () => {
     });
   });
 });
+
+function createTestAuditLogger(): AuditLogger {
+  return new AuditLogger({
+    enabled: false,
+    filePath: '/tmp/dynamic-mcp-test-audit.log',
+    maxEventBytes: 10_000,
+    service: 'dynamic-mcp-test',
+    serviceVersion: 'test'
+  });
+}
