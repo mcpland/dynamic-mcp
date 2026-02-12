@@ -10,6 +10,7 @@ describe('loadRuntimeConfig', () => {
     expect(config.http.host).toBe('127.0.0.1');
     expect(config.http.port).toBe(8788);
     expect(config.http.path).toBe('/mcp');
+    expect(config.dynamic.backend).toBe('file');
     expect(config.dynamic.storeFilePath.endsWith('.dynamic-mcp/tools.json')).toBe(true);
     expect(config.dynamic.maxTools).toBe(256);
     expect(config.sandbox.memoryLimit).toBe('512m');
@@ -42,6 +43,7 @@ describe('loadRuntimeConfig', () => {
 
     expect(config.transport).toBe('http');
     expect(config.http.path).toBe('/gateway');
+    expect(config.dynamic.backend).toBe('file');
     expect(config.dynamic.maxTools).toBe(12);
     expect(config.dynamic.adminToken).toBe('secret-token');
     expect(config.sandbox.allowedImages).toEqual(['node:lts-slim', 'node:22-alpine']);
@@ -67,5 +69,31 @@ describe('loadRuntimeConfig', () => {
     expect(config.auth.jwt?.jwksUrl).toBe('https://issuer/jwks');
     expect(config.auth.jwt?.issuer).toBe('https://issuer');
     expect(config.auth.jwt?.audience).toBe('dynamic-mcp');
+  });
+
+  it('loads postgres dynamic backend config', () => {
+    const config = loadRuntimeConfig(
+      [
+        '--dynamic-backend',
+        'postgres',
+        '--dynamic-pg-url',
+        'postgres://postgres:postgres@localhost:5432/dynamic_mcp',
+        '--dynamic-pg-schema',
+        'mcp_runtime'
+      ],
+      {}
+    );
+
+    expect(config.dynamic.backend).toBe('postgres');
+    expect(config.dynamic.postgres?.connectionString).toBe(
+      'postgres://postgres:postgres@localhost:5432/dynamic_mcp'
+    );
+    expect(config.dynamic.postgres?.schema).toBe('mcp_runtime');
+  });
+
+  it('requires postgres URL when postgres backend is selected', () => {
+    expect(() => loadRuntimeConfig(['--dynamic-backend', 'postgres'], {})).toThrow(
+      /MCP_DYNAMIC_PG_URL/
+    );
   });
 });

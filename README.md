@@ -35,6 +35,8 @@ A production-oriented **dynamic MCP server** in Node.js, with secure Docker sand
 - Optional admin token (`MCP_ADMIN_TOKEN`) for dangerous operations.
 - Allowlist/denylist controls for images and npm packages.
 - Runtime guard for anti-abuse throttling.
+- Optional JWT auth in HTTP mode (JWKS/issuer/audience/scope).
+- Structured JSONL audit logging for privileged/runtime actions.
 
 ## Quick start
 
@@ -59,6 +61,9 @@ Key vars:
 
 - `MCP_TRANSPORT`
 - `MCP_DYNAMIC_STORE`
+- `MCP_DYNAMIC_BACKEND` (`file` or `postgres`)
+- `MCP_DYNAMIC_PG_URL`
+- `MCP_DYNAMIC_PG_SCHEMA`
 - `MCP_DYNAMIC_MAX_TOOLS`
 - `MCP_ADMIN_TOKEN`
 - `MCP_SANDBOX_ALLOWED_IMAGES`
@@ -68,6 +73,14 @@ Key vars:
 - `MCP_TOOL_MAX_CONCURRENCY`
 - `MCP_TOOL_MAX_CALLS_PER_WINDOW`
 - `MCP_TOOL_RATE_WINDOW_MS`
+- `MCP_AUTH_MODE`
+- `MCP_AUTH_JWKS_URL`
+- `MCP_AUTH_ISSUER`
+- `MCP_AUTH_AUDIENCE`
+- `MCP_AUTH_REQUIRED_SCOPES`
+- `MCP_AUDIT_ENABLED`
+- `MCP_AUDIT_FILE`
+- `MCP_AUDIT_MAX_EVENT_BYTES`
 
 ## Dynamic tool code contract
 

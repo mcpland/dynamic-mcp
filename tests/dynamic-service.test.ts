@@ -67,6 +67,7 @@ describe('dynamic tool service', () => {
     const server = await createMcpServer({
       ...buildServerConfig(storeRoot),
       dynamic: {
+        backend: 'file',
         storeFilePath: join(storeRoot, 'tools.json'),
         maxTools: 10,
         adminToken: 'top-secret'
@@ -99,6 +100,7 @@ describe('dynamic tool service', () => {
 function buildServerConfig(storeRoot: string) {
   return {
     dynamic: {
+      backend: 'file',
       storeFilePath: join(storeRoot, 'tools.json'),
       maxTools: 10
     },

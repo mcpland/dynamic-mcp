@@ -1,12 +1,12 @@
 import {
   DynamicToolCreateSchema,
-  DynamicToolRecordSchema,
   DynamicToolStoreFileSchema,
-  DynamicToolUpdateSchema,
   type DynamicToolCreate,
   type DynamicToolRecord,
   type DynamicToolUpdate
 } from './spec.js';
+import { buildCreatedRecord, buildUpdatedRecord } from './record-utils.js';
+import type { DynamicToolRegistryPort } from './registry-port.js';
 import { readJsonFile, writeJsonFileAtomic } from '../lib/json-file.js';
 
 export interface DynamicToolRegistryOptions {
@@ -14,7 +14,7 @@ export interface DynamicToolRegistryOptions {
   maxTools: number;
 }
 
-export class DynamicToolRegistry {
+export class DynamicToolRegistry implements DynamicToolRegistryPort {
   private readonly filePath: string;
   private readonly maxTools: number;
   private readonly records = new Map<string, DynamicToolRecord>();
@@ -55,14 +55,14 @@ export class DynamicToolRegistry {
     this.loaded = true;
   }
 
-  list(): DynamicToolRecord[] {
+  async list(): Promise<DynamicToolRecord[]> {
     this.assertLoaded();
     return [...this.records.values()]
       .map((record) => structuredClone(record))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  get(name: string): DynamicToolRecord | null {
+  async get(name: string): Promise<DynamicToolRecord | null> {
     this.assertLoaded();
     const record = this.records.get(name);
     return record ? structuredClone(record) : null;
@@ -81,13 +81,7 @@ export class DynamicToolRegistry {
       throw new Error(`Dynamic tool limit reached (${this.maxTools}).`);
     }
 
-    const now = new Date().toISOString();
-    const record = DynamicToolRecordSchema.parse({
-      ...normalized,
-      createdAt: now,
-      updatedAt: now,
-      revision: 1
-    });
+    const record = buildCreatedRecord(normalized);
 
     this.records.set(record.name, record);
     await this.persist();
@@ -103,24 +97,7 @@ export class DynamicToolRegistry {
       throw new Error(`Dynamic tool not found: ${name}`);
     }
 
-    const normalizedPatch = DynamicToolUpdateSchema.parse(patch);
-    const mergedBase = DynamicToolCreateSchema.parse({
-      name: existing.name,
-      title: normalizedPatch.title ?? existing.title,
-      description: normalizedPatch.description ?? existing.description,
-      image: normalizedPatch.image ?? existing.image,
-      timeoutMs: normalizedPatch.timeoutMs ?? existing.timeoutMs,
-      dependencies: normalizedPatch.dependencies ?? existing.dependencies,
-      code: normalizedPatch.code ?? existing.code,
-      enabled: normalizedPatch.enabled ?? existing.enabled
-    });
-
-    const updated = DynamicToolRecordSchema.parse({
-      ...mergedBase,
-      createdAt: existing.createdAt,
-      updatedAt: new Date().toISOString(),
-      revision: existing.revision + 1
-    });
+    const updated = buildUpdatedRecord(existing, patch);
 
     this.records.set(name, updated);
     await this.persist();

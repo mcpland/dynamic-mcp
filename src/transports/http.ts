@@ -24,9 +24,14 @@ export interface HttpServerHandle {
 
 interface HttpServerOptions {
   dynamic: {
+    backend: 'file' | 'postgres';
     storeFilePath: string;
     maxTools: number;
     adminToken?: string;
+    postgres?: {
+      connectionString: string;
+      schema: string;
+    };
   };
   sandbox: {
     dockerBinary: string;

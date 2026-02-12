@@ -11,9 +11,14 @@ export interface RuntimeConfig {
     path: string;
   };
   dynamic: {
+    backend: 'file' | 'postgres';
     storeFilePath: string;
     maxTools: number;
     adminToken?: string;
+    postgres?: {
+      connectionString: string;
+      schema: string;
+    };
   };
   sandbox: {
     dockerBinary: string;
@@ -61,10 +66,17 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
   const storeFilePath = resolve(
     args['dynamic-store'] ?? env.MCP_DYNAMIC_STORE ?? '.dynamic-mcp/tools.json'
   );
+  const dynamicBackend = parseDynamicBackend(args['dynamic-backend'] ?? env.MCP_DYNAMIC_BACKEND ?? 'file');
   const maxTools = parseDynamicToolLimit(
     args['dynamic-max-tools'] ?? env.MCP_DYNAMIC_MAX_TOOLS ?? '256'
   );
   const adminToken = normalizeOptionalString(args['admin-token'] ?? env.MCP_ADMIN_TOKEN);
+  const postgresConnectionString = normalizeOptionalString(
+    args['dynamic-pg-url'] ?? env.MCP_DYNAMIC_PG_URL
+  );
+  const postgresSchema =
+    normalizeOptionalString(args['dynamic-pg-schema'] ?? env.MCP_DYNAMIC_PG_SCHEMA) ??
+    'dynamic_mcp';
   const allowedImages = splitCsv(
     args['sandbox-allowed-images'] ?? env.MCP_SANDBOX_ALLOWED_IMAGES ?? 'node:lts-slim'
   );
@@ -81,11 +93,14 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
       port: parsePort(portValue),
       path: normalizePath(pathValue)
     },
-    dynamic: {
+    dynamic: loadDynamicConfig({
+      backend: dynamicBackend,
       storeFilePath,
       maxTools,
-      ...(adminToken ? { adminToken } : {})
-    },
+      adminToken,
+      postgresConnectionString,
+      postgresSchema
+    }),
     sandbox: {
       dockerBinary: args['docker-bin'] ?? env.MCP_SANDBOX_DOCKER_BIN ?? 'docker',
       memoryLimit: args['sandbox-memory'] ?? env.MCP_SANDBOX_MEMORY_LIMIT ?? '512m',
@@ -137,8 +152,7 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
         86_400_000
       )
     },
-    auth: loadAuthConfig(args, env)
-    ,
+    auth: loadAuthConfig(args, env),
     audit: {
       enabled: parseBoolean(args['audit-enabled'] ?? env.MCP_AUDIT_ENABLED ?? 'true'),
       filePath: resolve(args['audit-file'] ?? env.MCP_AUDIT_FILE ?? '.dynamic-mcp/audit.log'),
@@ -223,6 +237,15 @@ function parseDynamicToolLimit(value: string): number {
   return parsed;
 }
 
+function parseDynamicBackend(value: string): RuntimeConfig['dynamic']['backend'] {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'file' || normalized === 'postgres') {
+    return normalized;
+  }
+
+  throw new Error(`Invalid MCP dynamic backend "${value}". Expected "file" or "postgres".`);
+}
+
 function parsePositiveInteger(value: string, label: string, max: number): number {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > max) {
@@ -293,9 +316,42 @@ function loadAuthConfig(args: ArgMap, env: NodeJS.ProcessEnv): RuntimeConfig['au
   };
 }
 
+function loadDynamicConfig(params: {
+  backend: RuntimeConfig['dynamic']['backend'];
+  storeFilePath: string;
+  maxTools: number;
+  adminToken?: string;
+  postgresConnectionString?: string;
+  postgresSchema: string;
+}): RuntimeConfig['dynamic'] {
+  const base = {
+    backend: params.backend,
+    storeFilePath: params.storeFilePath,
+    maxTools: params.maxTools,
+    ...(params.adminToken ? { adminToken: params.adminToken } : {})
+  } satisfies Omit<RuntimeConfig['dynamic'], 'postgres'>;
+
+  if (params.backend === 'file') {
+    return base;
+  }
+
+  const connectionString = normalizeRequiredString(
+    params.postgresConnectionString,
+    'MCP_DYNAMIC_PG_URL'
+  );
+
+  return {
+    ...base,
+    postgres: {
+      connectionString,
+      schema: params.postgresSchema
+    }
+  };
+}
+
 function normalizeRequiredString(value: string | undefined, key: string): string {
   if (!value || value.trim().length === 0) {
-    throw new Error(`Missing required auth config: ${key}`);
+    throw new Error(`Missing required config: ${key}`);
   }
 
   return value.trim();

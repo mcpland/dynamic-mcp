@@ -39,13 +39,13 @@ describe('DynamicToolRegistry', () => {
     const registryReloaded = new DynamicToolRegistry({ filePath, maxTools: 5 });
     await registryReloaded.load();
 
-    const loaded = registryReloaded.get('dynamic.echo');
+    const loaded = await registryReloaded.get('dynamic.echo');
     expect(loaded?.description).toBe('Echo with sandbox updated');
     expect(loaded?.revision).toBe(2);
 
     const removed = await registryReloaded.remove('dynamic.echo');
     expect(removed).toBe(true);
-    expect(registryReloaded.get('dynamic.echo')).toBeNull();
+    expect(await registryReloaded.get('dynamic.echo')).toBeNull();
 
     const content = await readFile(filePath, 'utf8');
     expect(content).toContain('"tools": []');

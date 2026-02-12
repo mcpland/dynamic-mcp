@@ -3,7 +3,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import type { DynamicToolExecutionEngine } from './executor.js';
-import type { DynamicToolRegistry } from './registry.js';
+import type { DynamicToolRegistryPort } from './registry-port.js';
 import {
   DynamicToolCreateSchema,
   DynamicToolUpdateSchema,
@@ -52,7 +52,7 @@ const textItem = (text: string) => ({ type: 'text' as const, text });
 
 export interface DynamicToolServiceOptions {
   server: McpServer;
-  registry: DynamicToolRegistry;
+  registry: DynamicToolRegistryPort;
   executionEngine: DynamicToolExecutionEngine;
   executionGuard: ToolExecutionGuard;
   auditLogger?: AuditLogger;
@@ -61,7 +61,7 @@ export interface DynamicToolServiceOptions {
 
 export class DynamicToolService {
   private readonly server: McpServer;
-  private readonly registry: DynamicToolRegistry;
+  private readonly registry: DynamicToolRegistryPort;
   private readonly executionEngine: DynamicToolExecutionEngine;
   private readonly executionGuard: ToolExecutionGuard;
   private readonly auditLogger?: AuditLogger;
@@ -95,9 +95,9 @@ export class DynamicToolService {
         return this.guarded('dynamic.tool.list', async () => {
           try {
             this.assertAdmin(adminToken);
-            const tools = this.registry
-              .list()
-              .map((record) => this.toToolView(record, includeCode));
+            const tools = (await this.registry.list()).map((record) =>
+              this.toToolView(record, includeCode)
+            );
 
             return {
               content: [textItem(JSON.stringify(tools, null, 2))],
@@ -123,7 +123,7 @@ export class DynamicToolService {
         return this.guarded('dynamic.tool.get', async () => {
           try {
             this.assertAdmin(adminToken);
-            const record = this.registry.get(name);
+            const record = await this.registry.get(name);
             if (!record) {
               return {
                 isError: true,
@@ -298,7 +298,7 @@ export class DynamicToolService {
   }
 
   private async refreshAllRuntimeTools(): Promise<void> {
-    const records = this.registry.list();
+    const records = await this.registry.list();
     for (const record of records) {
       await this.applyRuntimeTool(record);
     }

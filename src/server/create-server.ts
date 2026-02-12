@@ -3,7 +3,10 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { DockerDynamicToolExecutionEngine } from '../dynamic/docker-executor.js';
+import { getSharedPostgresPool } from '../dynamic/postgres-pool.js';
+import { PostgresDynamicToolRegistry } from '../dynamic/postgres-registry.js';
 import { DynamicToolRegistry } from '../dynamic/registry.js';
+import type { DynamicToolRegistryPort } from '../dynamic/registry-port.js';
 import { DynamicToolService } from '../dynamic/service.js';
 import { registerSessionSandboxTools } from '../sandbox/register-session-tools.js';
 import { ToolExecutionGuard } from '../security/guard.js';
@@ -40,9 +43,14 @@ const TimeOutputSchema = z.object({
 
 export interface CreateMcpServerOptions {
   dynamic: {
+    backend: 'file' | 'postgres';
     storeFilePath: string;
     maxTools: number;
     adminToken?: string;
+    postgres?: {
+      connectionString: string;
+      schema: string;
+    };
   };
   sandbox: {
     dockerBinary: string;
@@ -228,10 +236,7 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
     }
   );
 
-  const registry = new DynamicToolRegistry({
-    filePath: options.dynamic.storeFilePath,
-    maxTools: options.dynamic.maxTools
-  });
+  const registry = buildDynamicToolRegistry(options.dynamic);
 
   const executionEngine = new DockerDynamicToolExecutionEngine(options.sandbox);
   const executionGuard = new ToolExecutionGuard({
@@ -326,6 +331,27 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
   });
 
   return server;
+}
+
+function buildDynamicToolRegistry(
+  dynamic: CreateMcpServerOptions['dynamic']
+): DynamicToolRegistryPort {
+  if (dynamic.backend === 'postgres') {
+    if (!dynamic.postgres) {
+      throw new Error('Missing postgres dynamic registry config.');
+    }
+
+    return new PostgresDynamicToolRegistry({
+      pool: getSharedPostgresPool(dynamic.postgres.connectionString),
+      maxTools: dynamic.maxTools,
+      schema: dynamic.postgres.schema
+    });
+  }
+
+  return new DynamicToolRegistry({
+    filePath: dynamic.storeFilePath,
+    maxTools: dynamic.maxTools
+  });
 }
 
 function isValidTimeZone(timeZone: string): boolean {

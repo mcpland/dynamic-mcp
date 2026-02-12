@@ -23,6 +23,7 @@ describe('createMcpServer', () => {
     const storeRoot = await mkdtemp(join(tmpdir(), 'dynamic-mcp-server-test-'));
     const server = await createMcpServer({
       dynamic: {
+        backend: 'file',
         storeFilePath: join(storeRoot, 'tools.json'),
         maxTools: 32
       },
