@@ -149,3 +149,22 @@ Run container:
 docker build -t dynamic-mcp:latest .
 docker run --rm -p 8788:8788 dynamic-mcp:latest
 ```
+
+## Deployment Baselines
+
+Postgres-backed compose baseline:
+
+```bash
+docker compose -f deploy/docker-compose.postgres.yml up -d --build
+```
+
+Kubernetes baseline manifest:
+
+```bash
+kubectl apply -f deploy/k8s/dynamic-mcp-postgres.yaml
+```
+
+Before applying k8s manifests, update:
+
+- `image` in `deploy/k8s/dynamic-mcp-postgres.yaml`
+- `MCP_DYNAMIC_PG_URL` secret value

@@ -1,0 +1,65 @@
+name: dynamic-mcp
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dynamic_mcp
+      POSTGRES_USER: dynamic_mcp
+      POSTGRES_PASSWORD: change-me
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U dynamic_mcp -d dynamic_mcp']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  dynamic-mcp:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      MCP_TRANSPORT: http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8788
+      MCP_PATH: /mcp
+
+      MCP_DYNAMIC_BACKEND: postgres
+      MCP_DYNAMIC_PG_URL: postgres://dynamic_mcp:change-me@postgres:5432/dynamic_mcp
+      MCP_DYNAMIC_PG_SCHEMA: dynamic_mcp
+      MCP_DYNAMIC_PG_INIT_MAX_ATTEMPTS: 15
+      MCP_DYNAMIC_PG_INIT_BACKOFF_MS: 1000
+
+      MCP_AUDIT_ENABLED: true
+      MCP_AUDIT_FILE: /data/audit.log
+      MCP_AUDIT_MAX_EVENT_BYTES: 20000
+      MCP_AUDIT_MAX_FILE_BYTES: 10000000
+      MCP_AUDIT_MAX_FILES: 5
+
+      MCP_TOOL_MAX_CONCURRENCY: 8
+      MCP_TOOL_MAX_CALLS_PER_WINDOW: 300
+      MCP_TOOL_RATE_WINDOW_MS: 60000
+    ports:
+      - '8788:8788'
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'node -e "fetch(`http://127.0.0.1:8788/readyz`).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"'
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 20s
+    volumes:
+      - mcpdata:/data
+
+volumes:
+  pgdata: {}
+  mcpdata: {}

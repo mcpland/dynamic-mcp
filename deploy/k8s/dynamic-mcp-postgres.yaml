@@ -1,0 +1,112 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dynamic-mcp-config
+data:
+  MCP_TRANSPORT: 'http'
+  MCP_HOST: '0.0.0.0'
+  MCP_PORT: '8788'
+  MCP_PATH: '/mcp'
+
+  MCP_DYNAMIC_BACKEND: 'postgres'
+  MCP_DYNAMIC_PG_SCHEMA: 'dynamic_mcp'
+  MCP_DYNAMIC_PG_INIT_MAX_ATTEMPTS: '20'
+  MCP_DYNAMIC_PG_INIT_BACKOFF_MS: '1000'
+
+  MCP_AUDIT_ENABLED: 'true'
+  MCP_AUDIT_FILE: '/data/audit.log'
+  MCP_AUDIT_MAX_EVENT_BYTES: '20000'
+  MCP_AUDIT_MAX_FILE_BYTES: '10000000'
+  MCP_AUDIT_MAX_FILES: '5'
+
+  MCP_TOOL_MAX_CONCURRENCY: '8'
+  MCP_TOOL_MAX_CALLS_PER_WINDOW: '300'
+  MCP_TOOL_RATE_WINDOW_MS: '60000'
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dynamic-mcp-secrets
+type: Opaque
+stringData:
+  MCP_DYNAMIC_PG_URL: 'postgres://dynamic_mcp:change-me@postgres.default.svc.cluster.local:5432/dynamic_mcp'
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dynamic-mcp
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: dynamic-mcp
+  template:
+    metadata:
+      labels:
+        app: dynamic-mcp
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: dynamic-mcp
+          image: ghcr.io/your-org/dynamic-mcp:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8788
+              name: http
+          envFrom:
+            - configMapRef:
+                name: dynamic-mcp-config
+            - secretRef:
+                name: dynamic-mcp-secrets
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+          resources:
+            requests:
+              cpu: '250m'
+              memory: '256Mi'
+            limits:
+              cpu: '1000m'
+              memory: '1024Mi'
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 6
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dynamic-mcp
+spec:
+  selector:
+    app: dynamic-mcp
+  ports:
+    - name: http
+      port: 8788
+      targetPort: http
+  type: ClusterIP
