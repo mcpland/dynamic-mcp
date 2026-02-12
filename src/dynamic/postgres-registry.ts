@@ -112,17 +112,22 @@ export class PostgresDynamicToolRegistry implements DynamicToolRegistryPort {
     return rowToRecord(result.rows[0]);
   }
 
-  async update(name: string, patch: DynamicToolUpdate): Promise<DynamicToolRecord> {
+  async update(
+    name: string,
+    patch: DynamicToolUpdate,
+    expectedRevision?: number
+  ): Promise<DynamicToolRecord> {
     this.assertLoaded();
 
     const existing = await this.get(name);
     if (!existing) {
       throw new Error(`Dynamic tool not found: ${name}`);
     }
+    assertExpectedRevision(name, expectedRevision, existing.revision);
 
     const updated = buildUpdatedRecord(existing, patch);
 
-    await this.pool.query(
+    const result = await this.pool.query(
       `
       UPDATE ${this.schema}.dynamic_tools
       SET
@@ -136,6 +141,7 @@ export class PostgresDynamicToolRegistry implements DynamicToolRegistryPort {
         updated_at = $9::timestamptz,
         revision = $10
       WHERE name = $1
+        AND revision = $11
       `,
       [
         updated.name,
@@ -147,22 +153,44 @@ export class PostgresDynamicToolRegistry implements DynamicToolRegistryPort {
         updated.code,
         updated.enabled,
         updated.updatedAt,
-        updated.revision
+        updated.revision,
+        existing.revision
       ]
     );
+
+    if ((result.rowCount ?? 0) !== 1) {
+      throw await buildRevisionConflictOrNotFound(this.pool, this.schema, name, existing.revision);
+    }
 
     return updated;
   }
 
-  async remove(name: string): Promise<boolean> {
+  async remove(name: string, expectedRevision?: number): Promise<boolean> {
     this.assertLoaded();
 
-    const result = await this.pool.query(`DELETE FROM ${this.schema}.dynamic_tools WHERE name = $1`, [name]);
+    const existing = await this.get(name);
+    if (!existing) {
+      return false;
+    }
+    assertExpectedRevision(name, expectedRevision, existing.revision);
+
+    const result = await this.pool.query(
+      `DELETE FROM ${this.schema}.dynamic_tools WHERE name = $1 AND revision = $2`,
+      [name, existing.revision]
+    );
+    if ((result.rowCount ?? 0) !== 1) {
+      throw await buildRevisionConflictOrNotFound(this.pool, this.schema, name, existing.revision);
+    }
+
     return (result.rowCount ?? 0) > 0;
   }
 
-  async setEnabled(name: string, enabled: boolean): Promise<DynamicToolRecord> {
-    return this.update(name, { enabled });
+  async setEnabled(
+    name: string,
+    enabled: boolean,
+    expectedRevision?: number
+  ): Promise<DynamicToolRecord> {
+    return this.update(name, { enabled }, expectedRevision);
   }
 
   private async countTools(): Promise<number> {
@@ -209,4 +237,41 @@ function assertValidIdentifier(value: string): string {
   }
 
   return value;
+}
+
+function assertExpectedRevision(
+  name: string,
+  expectedRevision: number | undefined,
+  currentRevision: number
+): void {
+  if (expectedRevision === undefined) {
+    return;
+  }
+
+  if (expectedRevision !== currentRevision) {
+    throw new Error(
+      `Revision conflict for dynamic tool "${name}": expected ${expectedRevision}, current ${currentRevision}.`
+    );
+  }
+}
+
+async function buildRevisionConflictOrNotFound(
+  pool: Pool,
+  schema: string,
+  name: string,
+  previousRevision: number
+): Promise<Error> {
+  const result = await pool.query(`SELECT revision FROM ${schema}.dynamic_tools WHERE name = $1`, [name]);
+  if ((result.rowCount ?? 0) === 0) {
+    return new Error(`Dynamic tool not found: ${name}`);
+  }
+
+  const currentRevision = Number(result.rows[0]?.revision ?? NaN);
+  if (Number.isFinite(currentRevision)) {
+    return new Error(
+      `Revision conflict for dynamic tool "${name}": expected ${previousRevision}, current ${currentRevision}.`
+    );
+  }
+
+  return new Error(`Revision conflict for dynamic tool "${name}".`);
 }

@@ -37,6 +37,7 @@ A production-oriented **dynamic MCP server** in Node.js, with secure Docker sand
 - Runtime guard for anti-abuse throttling.
 - Optional JWT auth in HTTP mode (JWKS/issuer/audience/scope).
 - Structured JSONL audit logging for privileged/runtime actions.
+- Optimistic concurrency control for dynamic tool writes (`expectedRevision`).
 
 ## Quick start
 
@@ -113,6 +114,14 @@ Then invoke the tool with:
   "args": { "text": "hello" }
 }
 ```
+
+## Dynamic writes with revision safety
+
+Write operations (`dynamic.tool.update`, `dynamic.tool.enable`, `dynamic.tool.delete`) support
+optional `expectedRevision`.
+
+When provided, the server rejects stale writes with a revision conflict error instead of
+silently overwriting newer updates.
 
 ## Scripts
 

@@ -60,6 +60,31 @@ describe('dynamic tool service', () => {
 
     expect(runResult.isError).toBe(true);
     expect(runResult.content[0]?.type).toBe('text');
+
+    const firstUpdate = await client.callTool({
+      name: 'dynamic.tool.update',
+      arguments: {
+        name: 'dynamic.hello',
+        expectedRevision: 1,
+        patch: {
+          description: 'hello dynamic v2'
+        }
+      }
+    });
+    expect(firstUpdate.isError).not.toBe(true);
+
+    const staleUpdate = await client.callTool({
+      name: 'dynamic.tool.update',
+      arguments: {
+        name: 'dynamic.hello',
+        expectedRevision: 1,
+        patch: {
+          description: 'hello dynamic stale'
+        }
+      }
+    });
+    expect(staleUpdate.isError).toBe(true);
+    expect(staleUpdate.content[0]?.type).toBe('text');
   });
 
   it('enforces admin token for privileged dynamic tools when configured', async () => {

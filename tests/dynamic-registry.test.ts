@@ -36,6 +36,16 @@ describe('DynamicToolRegistry', () => {
     expect(updated.enabled).toBe(false);
     expect(updated.revision).toBe(2);
 
+    await expect(
+      registry.update(
+        'dynamic.echo',
+        {
+          description: 'stale update attempt'
+        },
+        1
+      )
+    ).rejects.toThrow(/revision conflict/i);
+
     const registryReloaded = new DynamicToolRegistry({ filePath, maxTools: 5 });
     await registryReloaded.load();
 

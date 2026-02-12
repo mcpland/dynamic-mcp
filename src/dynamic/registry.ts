@@ -89,13 +89,18 @@ export class DynamicToolRegistry implements DynamicToolRegistryPort {
     return structuredClone(record);
   }
 
-  async update(name: string, patch: DynamicToolUpdate): Promise<DynamicToolRecord> {
+  async update(
+    name: string,
+    patch: DynamicToolUpdate,
+    expectedRevision?: number
+  ): Promise<DynamicToolRecord> {
     this.assertLoaded();
 
     const existing = this.records.get(name);
     if (!existing) {
       throw new Error(`Dynamic tool not found: ${name}`);
     }
+    assertExpectedRevision(name, expectedRevision, existing.revision);
 
     const updated = buildUpdatedRecord(existing, patch);
 
@@ -105,8 +110,14 @@ export class DynamicToolRegistry implements DynamicToolRegistryPort {
     return structuredClone(updated);
   }
 
-  async remove(name: string): Promise<boolean> {
+  async remove(name: string, expectedRevision?: number): Promise<boolean> {
     this.assertLoaded();
+
+    const existing = this.records.get(name);
+    if (!existing) {
+      return false;
+    }
+    assertExpectedRevision(name, expectedRevision, existing.revision);
 
     const existed = this.records.delete(name);
     if (!existed) {
@@ -117,8 +128,12 @@ export class DynamicToolRegistry implements DynamicToolRegistryPort {
     return true;
   }
 
-  async setEnabled(name: string, enabled: boolean): Promise<DynamicToolRecord> {
-    return this.update(name, { enabled });
+  async setEnabled(
+    name: string,
+    enabled: boolean,
+    expectedRevision?: number
+  ): Promise<DynamicToolRecord> {
+    return this.update(name, { enabled }, expectedRevision);
   }
 
   private assertLoaded(): void {
@@ -138,5 +153,21 @@ export class DynamicToolRegistry implements DynamicToolRegistryPort {
     });
 
     await this.writeChain;
+  }
+}
+
+function assertExpectedRevision(
+  name: string,
+  expectedRevision: number | undefined,
+  currentRevision: number
+): void {
+  if (expectedRevision === undefined) {
+    return;
+  }
+
+  if (expectedRevision !== currentRevision) {
+    throw new Error(
+      `Revision conflict for dynamic tool "${name}": expected ${expectedRevision}, current ${currentRevision}.`
+    );
   }
 }

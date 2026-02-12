@@ -29,12 +29,19 @@ const DynamicCreateToolInputSchema = {
 const DynamicUpdateToolInputSchema = {
   ...AdminTokenSchema,
   name: z.string().regex(dynamicToolNameRegex),
-  patch: DynamicToolUpdateSchema
+  patch: DynamicToolUpdateSchema,
+  expectedRevision: z.number().int().positive().optional()
 };
 
 const DynamicLookupToolInputSchema = {
   ...AdminTokenSchema,
   name: z.string().regex(dynamicToolNameRegex)
+};
+
+const DynamicDeleteToolInputSchema = {
+  ...AdminTokenSchema,
+  name: z.string().regex(dynamicToolNameRegex),
+  expectedRevision: z.number().int().positive().optional()
 };
 
 const DynamicListToolInputSchema = {
@@ -45,7 +52,8 @@ const DynamicListToolInputSchema = {
 const DynamicEnableToolInputSchema = {
   ...AdminTokenSchema,
   name: z.string().regex(dynamicToolNameRegex),
-  enabled: z.boolean()
+  enabled: z.boolean(),
+  expectedRevision: z.number().int().positive().optional()
 };
 
 const textItem = (text: string) => ({ type: 'text' as const, text });
@@ -189,13 +197,13 @@ export class DynamicToolService {
         description: 'Update an existing dynamic tool definition',
         inputSchema: DynamicUpdateToolInputSchema
       },
-      async ({ adminToken, name, patch }) => {
+      async ({ adminToken, name, patch, expectedRevision }) => {
         return this.guarded('dynamic.tool.update', async () => {
           try {
             this.assertAdmin(adminToken);
             this.assertNameAllowed(name);
 
-            const updated = await this.registry.update(name, patch);
+            const updated = await this.registry.update(name, patch, expectedRevision);
             await this.applyRuntimeTool(updated);
             this.server.sendToolListChanged();
             void this.auditLogger?.log({
@@ -224,15 +232,15 @@ export class DynamicToolService {
       {
         title: 'Delete Dynamic Tool',
         description: 'Delete a dynamic tool and unregister it from MCP',
-        inputSchema: DynamicLookupToolInputSchema
+        inputSchema: DynamicDeleteToolInputSchema
       },
-      async ({ adminToken, name }) => {
+      async ({ adminToken, name, expectedRevision }) => {
         return this.guarded('dynamic.tool.delete', async () => {
           try {
             this.assertAdmin(adminToken);
             this.assertNameAllowed(name);
 
-            const removed = await this.registry.remove(name);
+            const removed = await this.registry.remove(name, expectedRevision);
             this.removeRuntimeTool(name);
             this.server.sendToolListChanged();
 
@@ -267,13 +275,13 @@ export class DynamicToolService {
         description: 'Enable or disable a dynamic tool at runtime',
         inputSchema: DynamicEnableToolInputSchema
       },
-      async ({ adminToken, name, enabled }) => {
+      async ({ adminToken, name, enabled, expectedRevision }) => {
         return this.guarded('dynamic.tool.enable', async () => {
           try {
             this.assertAdmin(adminToken);
             this.assertNameAllowed(name);
 
-            const updated = await this.registry.setEnabled(name, enabled);
+            const updated = await this.registry.setEnabled(name, enabled, expectedRevision);
             await this.applyRuntimeTool(updated);
             this.server.sendToolListChanged();
             void this.auditLogger?.log({
