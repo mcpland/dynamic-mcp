@@ -22,7 +22,8 @@ async function main(): Promise<void> {
   const serverHandle = await startHttpTransport(config.http, {
     dynamic: config.dynamic,
     sandbox: config.sandbox,
-    security: config.security
+    security: config.security,
+    auth: config.auth
   });
   console.error(
     `[dynamic-mcp] running in http mode at http://${config.http.host}:${config.http.port}${config.http.path}`

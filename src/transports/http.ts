@@ -2,11 +2,13 @@ import { randomUUID } from 'node:crypto';
 import type { Server as HttpServer } from 'node:http';
 
 import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js';
+import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import type { Request, Response } from 'express';
 
+import { JwtAuthVerifier } from '../auth/jwt.js';
 import { createMcpServer } from '../server/create-server.js';
 
 export interface HttpTransportConfig {
@@ -42,6 +44,15 @@ interface HttpServerOptions {
     toolMaxCallsPerWindow: number;
     toolRateWindowMs: number;
   };
+  auth: {
+    mode: 'none' | 'jwt';
+    jwt?: {
+      jwksUrl: string;
+      issuer: string;
+      audience: string;
+      requiredScopes: string[];
+    };
+  };
 }
 
 interface Session {
@@ -54,6 +65,16 @@ export async function startHttpTransport(
   options: HttpServerOptions
 ): Promise<HttpServerHandle> {
   const app = createMcpExpressApp({ host: config.host });
+  const jwtVerifier =
+    options.auth.mode === 'jwt' && options.auth.jwt
+      ? new JwtAuthVerifier({
+          enabled: true,
+          jwksUrl: options.auth.jwt.jwksUrl,
+          issuer: options.auth.jwt.issuer,
+          audience: options.auth.jwt.audience,
+          requiredScopes: options.auth.jwt.requiredScopes
+        })
+      : null;
   const sessions = new Map<string, Session>();
   const closingSessions = new Set<string>();
 
@@ -113,6 +134,10 @@ export async function startHttpTransport(
   };
 
   const postHandler = async (req: Request, res: Response): Promise<void> => {
+    if (!(await authenticate(req, res, jwtVerifier))) {
+      return;
+    }
+
     const sessionId = req.headers['mcp-session-id'];
 
     try {
@@ -140,6 +165,10 @@ export async function startHttpTransport(
   };
 
   const getHandler = async (req: Request, res: Response): Promise<void> => {
+    if (!(await authenticate(req, res, jwtVerifier))) {
+      return;
+    }
+
     const sessionId = req.headers['mcp-session-id'];
     if (typeof sessionId !== 'string') {
       sendJsonRpcError(res, 400, -32000, 'Missing mcp-session-id header.');
@@ -160,6 +189,10 @@ export async function startHttpTransport(
   };
 
   const deleteHandler = async (req: Request, res: Response): Promise<void> => {
+    if (!(await authenticate(req, res, jwtVerifier))) {
+      return;
+    }
+
     const sessionId = req.headers['mcp-session-id'];
     if (typeof sessionId !== 'string') {
       sendJsonRpcError(res, 400, -32000, 'Missing mcp-session-id header.');
@@ -194,6 +227,42 @@ export async function startHttpTransport(
       await closeServer(httpServer);
     }
   };
+}
+
+async function authenticate(
+  req: Request,
+  res: Response,
+  verifier: JwtAuthVerifier | null
+): Promise<boolean> {
+  if (!verifier) {
+    return true;
+  }
+
+  const authorization = req.headers.authorization;
+  if (!authorization || !authorization.startsWith('Bearer ')) {
+    sendJsonRpcError(res, 401, -32001, 'Unauthorized: missing bearer token.');
+    return false;
+  }
+
+  const token = authorization.slice('Bearer '.length).trim();
+  if (token.length === 0) {
+    sendJsonRpcError(res, 401, -32001, 'Unauthorized: empty bearer token.');
+    return false;
+  }
+
+  try {
+    const authInfo = await verifier.verifyAccessToken(token);
+    (req as Request & { auth?: AuthInfo }).auth = authInfo;
+    return true;
+  } catch (error) {
+    sendJsonRpcError(
+      res,
+      403,
+      -32002,
+      error instanceof Error ? `Forbidden: ${error.message}` : 'Forbidden: invalid token.'
+    );
+    return false;
+  }
 }
 
 function sendJsonRpcError(

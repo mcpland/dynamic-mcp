@@ -18,6 +18,7 @@ describe('loadRuntimeConfig', () => {
     expect(config.sandbox.maxSessions).toBe(20);
     expect(config.security.toolMaxConcurrency).toBe(8);
     expect(config.security.toolRateWindowMs).toBe(60000);
+    expect(config.auth.mode).toBe('none');
   });
 
   it('reads CLI flags and normalizes path', () => {
@@ -48,5 +49,21 @@ describe('loadRuntimeConfig', () => {
     expect(() => loadRuntimeConfig(['--transport', 'bad'], {})).toThrow(
       /Unsupported transport/
     );
+  });
+
+  it('loads jwt auth mode config', () => {
+    const config = loadRuntimeConfig(
+      ['--auth-mode', 'jwt', '--auth-jwks-url', 'https://issuer/jwks', '--auth-issuer', 'https://issuer', '--auth-audience', 'dynamic-mcp'],
+      {}
+    );
+
+    expect(config.auth.mode).toBe('jwt');
+    if (config.auth.mode !== 'jwt') {
+      throw new Error('Expected jwt mode');
+    }
+
+    expect(config.auth.jwt?.jwksUrl).toBe('https://issuer/jwks');
+    expect(config.auth.jwt?.issuer).toBe('https://issuer');
+    expect(config.auth.jwt?.audience).toBe('dynamic-mcp');
   });
 });

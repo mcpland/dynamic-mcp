@@ -32,6 +32,15 @@ export interface RuntimeConfig {
     toolMaxCallsPerWindow: number;
     toolRateWindowMs: number;
   };
+  auth: {
+    mode: 'none' | 'jwt';
+    jwt?: {
+      jwksUrl: string;
+      issuer: string;
+      audience: string;
+      requiredScopes: string[];
+    };
+  };
 }
 
 type ArgMap = Record<string, string>;
@@ -122,7 +131,8 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
         'MCP tool rate window',
         86_400_000
       )
-    }
+    },
+    auth: loadAuthConfig(args, env)
   };
 }
 
@@ -221,4 +231,44 @@ function splitCsv(value: string): string[] {
     .split(',')
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
+}
+
+function loadAuthConfig(args: ArgMap, env: NodeJS.ProcessEnv): RuntimeConfig['auth'] {
+  const modeRaw = (args['auth-mode'] ?? env.MCP_AUTH_MODE ?? 'none').trim().toLowerCase();
+  if (modeRaw === 'none') {
+    return { mode: 'none' };
+  }
+
+  if (modeRaw !== 'jwt') {
+    throw new Error(`Invalid MCP auth mode "${modeRaw}". Expected "none" or "jwt".`);
+  }
+
+  const jwksUrl = normalizeRequiredString(args['auth-jwks-url'] ?? env.MCP_AUTH_JWKS_URL, 'MCP_AUTH_JWKS_URL');
+  const issuer = normalizeRequiredString(args['auth-issuer'] ?? env.MCP_AUTH_ISSUER, 'MCP_AUTH_ISSUER');
+  const audience = normalizeRequiredString(
+    args['auth-audience'] ?? env.MCP_AUTH_AUDIENCE,
+    'MCP_AUTH_AUDIENCE'
+  );
+
+  const requiredScopes = splitCsv(
+    args['auth-required-scopes'] ?? env.MCP_AUTH_REQUIRED_SCOPES ?? ''
+  );
+
+  return {
+    mode: 'jwt',
+    jwt: {
+      jwksUrl,
+      issuer,
+      audience,
+      requiredScopes
+    }
+  };
+}
+
+function normalizeRequiredString(value: string | undefined, key: string): string {
+  if (!value || value.trim().length === 0) {
+    throw new Error(`Missing required auth config: ${key}`);
+  }
+
+  return value.trim();
 }
