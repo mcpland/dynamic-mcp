@@ -16,6 +16,8 @@ describe('loadRuntimeConfig', () => {
     expect(config.sandbox.allowedImages).toEqual(['node:lts-slim']);
     expect(config.sandbox.sessionTimeoutSeconds).toBe(1800);
     expect(config.sandbox.maxSessions).toBe(20);
+    expect(config.security.toolMaxConcurrency).toBe(8);
+    expect(config.security.toolRateWindowMs).toBe(60000);
   });
 
   it('reads CLI flags and normalizes path', () => {

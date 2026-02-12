@@ -8,6 +8,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { DynamicDependencySchema } from '../dynamic/spec.js';
+import type { ToolExecutionGuard } from '../security/guard.js';
 import { ensureDockerAvailable, runDocker } from './docker.js';
 import { sanitizeContainerId, sanitizeDockerImage, sanitizeShellCommand } from './policy.js';
 import { SandboxSessionRegistry } from './session-registry.js';
@@ -23,6 +24,8 @@ export interface SessionSandboxOptions {
   blockedPackages: string[];
   sessionTimeoutSeconds: number;
   maxSessions: number;
+  adminToken?: string;
+  executionGuard: ToolExecutionGuard;
 }
 
 const sessionRegistry = new SandboxSessionRegistry();
@@ -30,17 +33,20 @@ let scavengerHandle: NodeJS.Timeout | null = null;
 let cleanupHooksInstalled = false;
 
 const InitializeSchema = {
+  adminToken: z.string().optional(),
   image: z.string().optional(),
   timeoutMs: z.number().int().min(1_000).max(120_000).optional()
 };
 
 const ExecSchema = {
+  adminToken: z.string().optional(),
   sessionId: z.string(),
   commands: z.array(z.string().min(1)).min(1).max(20),
   timeoutMs: z.number().int().min(1_000).max(120_000).optional()
 };
 
 const RunJsSchema = {
+  adminToken: z.string().optional(),
   sessionId: z.string(),
   code: z.string().min(1).max(200_000),
   dependencies: z.array(DynamicDependencySchema).max(64).default([]),
@@ -48,7 +54,12 @@ const RunJsSchema = {
 };
 
 const StopSchema = {
+  adminToken: z.string().optional(),
   sessionId: z.string()
+};
+
+const ListSchema = {
+  adminToken: z.string().optional()
 };
 
 export function registerSessionSandboxTools(server: McpServer, options: SessionSandboxOptions): void {
@@ -59,19 +70,23 @@ export function registerSessionSandboxTools(server: McpServer, options: SessionS
     'sandbox.session.list',
     {
       title: 'List Sandbox Sessions',
-      description: 'List active long-lived sandbox sessions'
+      description: 'List active long-lived sandbox sessions',
+      inputSchema: ListSchema
     },
-    async (): Promise<CallToolResult> => {
-      const sessions = sessionRegistry.list();
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(sessions, null, 2)
-          }
-        ],
-        structuredContent: { sessions }
-      };
+    async ({ adminToken }): Promise<CallToolResult> => {
+      return guardedRun(options, 'sandbox.session.list', async () => {
+        assertAdmin(adminToken, options.adminToken);
+        const sessions = sessionRegistry.list();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(sessions, null, 2)
+            }
+          ],
+          structuredContent: { sessions }
+        };
+      });
     }
   );
 
@@ -82,8 +97,9 @@ export function registerSessionSandboxTools(server: McpServer, options: SessionS
       description: 'Create a reusable container session for iterative commands and scripts',
       inputSchema: InitializeSchema
     },
-    async ({ image, timeoutMs }): Promise<CallToolResult> => {
-      try {
+    async ({ adminToken, image, timeoutMs }): Promise<CallToolResult> => {
+      return guardedRun(options, 'sandbox.initialize', async () => {
+        assertAdmin(adminToken, options.adminToken);
         await ensureDockerAvailable(options.dockerBinary);
 
         const chosenImage = image ?? options.allowedImages[0] ?? 'node:lts-slim';
@@ -155,9 +171,7 @@ export function registerSessionSandboxTools(server: McpServer, options: SessionS
             timeoutMs: options.sessionTimeoutSeconds * 1000
           }
         };
-      } catch (error) {
-        return errorResult(error);
-      }
+      });
     }
   );
 
@@ -168,8 +182,9 @@ export function registerSessionSandboxTools(server: McpServer, options: SessionS
       description: 'Run one or more shell commands in an active sandbox session',
       inputSchema: ExecSchema
     },
-    async ({ sessionId, commands, timeoutMs }): Promise<CallToolResult> => {
-      try {
+    async ({ adminToken, sessionId, commands, timeoutMs }): Promise<CallToolResult> => {
+      return guardedRun(options, 'sandbox.exec', async () => {
+        assertAdmin(adminToken, options.adminToken);
         await ensureDockerAvailable(options.dockerBinary);
         assertSessionExists(sessionId);
 
@@ -204,9 +219,7 @@ export function registerSessionSandboxTools(server: McpServer, options: SessionS
             }
           ]
         };
-      } catch (error) {
-        return errorResult(error);
-      }
+      });
     }
   );
 
@@ -217,58 +230,62 @@ export function registerSessionSandboxTools(server: McpServer, options: SessionS
       description: 'Install dependencies and run JavaScript in an existing sandbox session',
       inputSchema: RunJsSchema
     },
-    async ({ sessionId, code, dependencies, timeoutMs }): Promise<CallToolResult> => {
+    async ({ adminToken, sessionId, code, dependencies, timeoutMs }): Promise<CallToolResult> => {
       const workspace = await mkdtemp(join(tmpdir(), 'dynamic-mcp-session-js-'));
 
       try {
-        await ensureDockerAvailable(options.dockerBinary);
-        assertSessionExists(sessionId);
-        assertDependenciesAllowed(dependencies, options);
+        return await guardedRun(options, 'sandbox.run_js', async () => {
+          assertAdmin(adminToken, options.adminToken);
+          await ensureDockerAvailable(options.dockerBinary);
+          assertSessionExists(sessionId);
+          assertDependenciesAllowed(dependencies, options);
 
-        const dependencyRecord = Object.fromEntries(
-          dependencies.map((dependency) => [dependency.name, dependency.version])
-        );
+          const dependencyRecord = Object.fromEntries(
+            dependencies.map((dependency) => [dependency.name, dependency.version])
+          );
 
-        await writeFile(join(workspace, 'index.mjs'), code, 'utf8');
-        await writeFile(
-          join(workspace, 'package.json'),
-          `${JSON.stringify({ type: 'module', dependencies: dependencyRecord }, null, 2)}\n`,
-          'utf8'
-        );
+          await writeFile(join(workspace, 'index.mjs'), code, 'utf8');
+          await writeFile(
+            join(workspace, 'package.json'),
+            `${JSON.stringify({ type: 'module', dependencies: dependencyRecord }, null, 2)}\n`,
+            'utf8'
+          );
 
-        await runDocker(options.dockerBinary, ['cp', `${workspace}/.`, `${sessionId}:/workspace`], {
-          timeout: 15_000,
-          maxBuffer: options.maxOutputBytes
-        });
+          await runDocker(options.dockerBinary, ['cp', `${workspace}/.`, `${sessionId}:/workspace`], {
+            timeout: 15_000,
+            maxBuffer: options.maxOutputBytes
+          });
 
-        const timeout = Math.min(timeoutMs ?? options.maxTimeoutMs, options.maxTimeoutMs);
-        const command =
-          dependencies.length > 0
-            ? 'npm install --omit=dev --ignore-scripts --no-audit --fund=false --loglevel=error && node index.mjs'
-            : 'node index.mjs';
+          const timeout = Math.min(timeoutMs ?? options.maxTimeoutMs, options.maxTimeoutMs);
+          const command =
+            dependencies.length > 0
+              ? 'npm install --omit=dev --ignore-scripts --no-audit --fund=false --loglevel=error && node index.mjs'
+              : 'node index.mjs';
 
-        const { stdout, stderr } = await runDocker(
-          options.dockerBinary,
-          ['exec', sessionId, '/bin/sh', '-lc', command],
-          {
-            timeout,
-            maxBuffer: Math.max(options.maxOutputBytes * 2, 1_000_000)
-          }
-        );
-
-        sessionRegistry.touch(sessionId);
-
-        const output = clipText(`${stdout}${stderr ? `\n${stderr}` : ''}`.trim(), options.maxOutputBytes);
-        return {
-          content: [
+          const { stdout, stderr } = await runDocker(
+            options.dockerBinary,
+            ['exec', sessionId, '/bin/sh', '-lc', command],
             {
-              type: 'text',
-              text: output.length > 0 ? output : 'JavaScript execution completed with no output.'
+              timeout,
+              maxBuffer: Math.max(options.maxOutputBytes * 2, 1_000_000)
             }
-          ]
-        };
-      } catch (error) {
-        return errorResult(error);
+          );
+
+          sessionRegistry.touch(sessionId);
+
+          const output = clipText(
+            `${stdout}${stderr ? `\n${stderr}` : ''}`.trim(),
+            options.maxOutputBytes
+          );
+          return {
+            content: [
+              {
+                type: 'text',
+                text: output.length > 0 ? output : 'JavaScript execution completed with no output.'
+              }
+            ]
+          };
+        });
       } finally {
         await rm(workspace, { recursive: true, force: true });
       }
@@ -282,8 +299,9 @@ export function registerSessionSandboxTools(server: McpServer, options: SessionS
       description: 'Stop and remove a sandbox session container',
       inputSchema: StopSchema
     },
-    async ({ sessionId }): Promise<CallToolResult> => {
-      try {
+    async ({ adminToken, sessionId }): Promise<CallToolResult> => {
+      return guardedRun(options, 'sandbox.stop', async () => {
+        assertAdmin(adminToken, options.adminToken);
         await ensureDockerAvailable(options.dockerBinary);
 
         const sanitized = sanitizeContainerId(sessionId);
@@ -305,9 +323,7 @@ export function registerSessionSandboxTools(server: McpServer, options: SessionS
             }
           ]
         };
-      } catch (error) {
-        return errorResult(error);
-      }
+      });
     }
   );
 }
@@ -387,6 +403,28 @@ function assertDependenciesAllowed(
   const blocked = dependencies.find((dependency) => options.blockedPackages.includes(dependency.name));
   if (blocked) {
     throw new Error(`Blocked npm package requested: ${blocked.name}`);
+  }
+}
+
+function assertAdmin(provided: string | undefined, expected: string | undefined): void {
+  if (!expected) {
+    return;
+  }
+
+  if (!provided || provided !== expected) {
+    throw new Error('Unauthorized: invalid admin token.');
+  }
+}
+
+async function guardedRun(
+  options: SessionSandboxOptions,
+  scope: string,
+  work: () => Promise<CallToolResult>
+): Promise<CallToolResult> {
+  try {
+    return await options.executionGuard.run(scope, work);
+  } catch (error) {
+    return errorResult(error);
   }
 }
 

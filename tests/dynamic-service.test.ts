@@ -37,6 +37,11 @@ describe('dynamic tool service', () => {
         blockedPackages: [],
         sessionTimeoutSeconds: 1_800,
         maxSessions: 20
+      },
+      security: {
+        toolMaxConcurrency: 8,
+        toolMaxCallsPerWindow: 1000,
+        toolRateWindowMs: 60_000
       }
     });
     const client = new Client({ name: 'test-client', version: '1.0.0' });

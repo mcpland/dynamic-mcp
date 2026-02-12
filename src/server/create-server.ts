@@ -6,6 +6,7 @@ import { DockerDynamicToolExecutionEngine } from '../dynamic/docker-executor.js'
 import { DynamicToolRegistry } from '../dynamic/registry.js';
 import { DynamicToolService } from '../dynamic/service.js';
 import { registerSessionSandboxTools } from '../sandbox/register-session-tools.js';
+import { ToolExecutionGuard } from '../security/guard.js';
 
 const serviceVersion = '0.2.0';
 
@@ -53,6 +54,11 @@ export interface CreateMcpServerOptions {
     blockedPackages: string[];
     sessionTimeoutSeconds: number;
     maxSessions: number;
+  };
+  security: {
+    toolMaxConcurrency: number;
+    toolMaxCallsPerWindow: number;
+    toolRateWindowMs: number;
   };
 }
 
@@ -226,11 +232,17 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
   });
 
   const executionEngine = new DockerDynamicToolExecutionEngine(options.sandbox);
+  const executionGuard = new ToolExecutionGuard({
+    maxConcurrency: options.security.toolMaxConcurrency,
+    maxCallsPerWindow: options.security.toolMaxCallsPerWindow,
+    windowMs: options.security.toolRateWindowMs
+  });
   const dynamicService = new DynamicToolService({
     server,
     registry,
     executionEngine,
-    adminToken: options.dynamic.adminToken
+    adminToken: options.dynamic.adminToken,
+    executionGuard
   });
   await dynamicService.initialize();
 
@@ -244,7 +256,9 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
     allowedImages: options.sandbox.allowedImages,
     blockedPackages: options.sandbox.blockedPackages,
     sessionTimeoutSeconds: options.sandbox.sessionTimeoutSeconds,
-    maxSessions: options.sandbox.maxSessions
+    maxSessions: options.sandbox.maxSessions,
+    adminToken: options.dynamic.adminToken,
+    executionGuard
   });
 
   return server;

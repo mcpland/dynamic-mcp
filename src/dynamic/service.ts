@@ -10,6 +10,7 @@ import {
   dynamicToolNameRegex
 } from './spec.js';
 import type { DynamicToolCreate, DynamicToolRecord, DynamicToolUpdate } from './spec.js';
+import type { ToolExecutionGuard } from '../security/guard.js';
 
 const DynamicInvocationSchema = z.object({
   args: z.record(z.string(), z.unknown()).default({})
@@ -52,6 +53,7 @@ export interface DynamicToolServiceOptions {
   server: McpServer;
   registry: DynamicToolRegistry;
   executionEngine: DynamicToolExecutionEngine;
+  executionGuard: ToolExecutionGuard;
   adminToken?: string;
 }
 
@@ -59,6 +61,7 @@ export class DynamicToolService {
   private readonly server: McpServer;
   private readonly registry: DynamicToolRegistry;
   private readonly executionEngine: DynamicToolExecutionEngine;
+  private readonly executionGuard: ToolExecutionGuard;
   private readonly adminToken?: string;
   private readonly runtimeToolHandles = new Map<string, RegisteredTool>();
 
@@ -66,6 +69,7 @@ export class DynamicToolService {
     this.server = options.server;
     this.registry = options.registry;
     this.executionEngine = options.executionEngine;
+    this.executionGuard = options.executionGuard;
     this.adminToken = options.adminToken;
   }
 
@@ -84,21 +88,23 @@ export class DynamicToolService {
         inputSchema: DynamicListToolInputSchema
       },
       async ({ adminToken, includeCode }) => {
-        try {
-          this.assertAdmin(adminToken);
-          const tools = this.registry
-            .list()
-            .map((record) => this.toToolView(record, includeCode));
+        return this.guarded('dynamic.tool.list', async () => {
+          try {
+            this.assertAdmin(adminToken);
+            const tools = this.registry
+              .list()
+              .map((record) => this.toToolView(record, includeCode));
 
-          return {
-            content: [textItem(JSON.stringify(tools, null, 2))],
-            structuredContent: {
-              tools
-            }
-          };
-        } catch (error) {
-          return toErrorResult(error);
-        }
+            return {
+              content: [textItem(JSON.stringify(tools, null, 2))],
+              structuredContent: {
+                tools
+              }
+            };
+          } catch (error) {
+            return toErrorResult(error);
+          }
+        });
       }
     );
 
@@ -110,26 +116,28 @@ export class DynamicToolService {
         inputSchema: DynamicLookupToolInputSchema
       },
       async ({ adminToken, name }) => {
-        try {
-          this.assertAdmin(adminToken);
-          const record = this.registry.get(name);
-          if (!record) {
-            return {
-              isError: true,
-              content: [textItem(`Dynamic tool not found: ${name}`)]
-            };
-          }
-
-          const tool = this.toToolView(record, true);
-          return {
-            content: [textItem(JSON.stringify(tool, null, 2))],
-            structuredContent: {
-              tool
+        return this.guarded('dynamic.tool.get', async () => {
+          try {
+            this.assertAdmin(adminToken);
+            const record = this.registry.get(name);
+            if (!record) {
+              return {
+                isError: true,
+                content: [textItem(`Dynamic tool not found: ${name}`)]
+              };
             }
-          };
-        } catch (error) {
-          return toErrorResult(error);
-        }
+
+            const tool = this.toToolView(record, true);
+            return {
+              content: [textItem(JSON.stringify(tool, null, 2))],
+              structuredContent: {
+                tool
+              }
+            };
+          } catch (error) {
+            return toErrorResult(error);
+          }
+        });
       }
     );
 
@@ -141,24 +149,26 @@ export class DynamicToolService {
         inputSchema: DynamicCreateToolInputSchema
       },
       async ({ adminToken, tool }) => {
-        try {
-          this.assertAdmin(adminToken);
-          this.assertNameAllowed(tool.name);
+        return this.guarded('dynamic.tool.create', async () => {
+          try {
+            this.assertAdmin(adminToken);
+            this.assertNameAllowed(tool.name);
 
-          const created = await this.registry.create(tool);
-          await this.applyRuntimeTool(created);
-          this.server.sendToolListChanged();
+            const created = await this.registry.create(tool);
+            await this.applyRuntimeTool(created);
+            this.server.sendToolListChanged();
 
-          const view = this.toToolView(created, false);
-          return {
-            content: [textItem(`Created dynamic tool: ${created.name}`)],
-            structuredContent: {
-              tool: view
-            }
-          };
-        } catch (error) {
-          return toErrorResult(error);
-        }
+            const view = this.toToolView(created, false);
+            return {
+              content: [textItem(`Created dynamic tool: ${created.name}`)],
+              structuredContent: {
+                tool: view
+              }
+            };
+          } catch (error) {
+            return toErrorResult(error);
+          }
+        });
       }
     );
 
@@ -170,24 +180,26 @@ export class DynamicToolService {
         inputSchema: DynamicUpdateToolInputSchema
       },
       async ({ adminToken, name, patch }) => {
-        try {
-          this.assertAdmin(adminToken);
-          this.assertNameAllowed(name);
+        return this.guarded('dynamic.tool.update', async () => {
+          try {
+            this.assertAdmin(adminToken);
+            this.assertNameAllowed(name);
 
-          const updated = await this.registry.update(name, patch);
-          await this.applyRuntimeTool(updated);
-          this.server.sendToolListChanged();
+            const updated = await this.registry.update(name, patch);
+            await this.applyRuntimeTool(updated);
+            this.server.sendToolListChanged();
 
-          const view = this.toToolView(updated, false);
-          return {
-            content: [textItem(`Updated dynamic tool: ${updated.name}`)],
-            structuredContent: {
-              tool: view
-            }
-          };
-        } catch (error) {
-          return toErrorResult(error);
-        }
+            const view = this.toToolView(updated, false);
+            return {
+              content: [textItem(`Updated dynamic tool: ${updated.name}`)],
+              structuredContent: {
+                tool: view
+              }
+            };
+          } catch (error) {
+            return toErrorResult(error);
+          }
+        });
       }
     );
 
@@ -199,27 +211,29 @@ export class DynamicToolService {
         inputSchema: DynamicLookupToolInputSchema
       },
       async ({ adminToken, name }) => {
-        try {
-          this.assertAdmin(adminToken);
-          this.assertNameAllowed(name);
+        return this.guarded('dynamic.tool.delete', async () => {
+          try {
+            this.assertAdmin(adminToken);
+            this.assertNameAllowed(name);
 
-          const removed = await this.registry.remove(name);
-          this.removeRuntimeTool(name);
-          this.server.sendToolListChanged();
+            const removed = await this.registry.remove(name);
+            this.removeRuntimeTool(name);
+            this.server.sendToolListChanged();
 
-          if (!removed) {
+            if (!removed) {
+              return {
+                isError: true,
+                content: [textItem(`Dynamic tool not found: ${name}`)]
+              };
+            }
+
             return {
-              isError: true,
-              content: [textItem(`Dynamic tool not found: ${name}`)]
+              content: [textItem(`Deleted dynamic tool: ${name}`)]
             };
+          } catch (error) {
+            return toErrorResult(error);
           }
-
-          return {
-            content: [textItem(`Deleted dynamic tool: ${name}`)]
-          };
-        } catch (error) {
-          return toErrorResult(error);
-        }
+        });
       }
     );
 
@@ -231,23 +245,25 @@ export class DynamicToolService {
         inputSchema: DynamicEnableToolInputSchema
       },
       async ({ adminToken, name, enabled }) => {
-        try {
-          this.assertAdmin(adminToken);
-          this.assertNameAllowed(name);
+        return this.guarded('dynamic.tool.enable', async () => {
+          try {
+            this.assertAdmin(adminToken);
+            this.assertNameAllowed(name);
 
-          const updated = await this.registry.setEnabled(name, enabled);
-          await this.applyRuntimeTool(updated);
-          this.server.sendToolListChanged();
+            const updated = await this.registry.setEnabled(name, enabled);
+            await this.applyRuntimeTool(updated);
+            this.server.sendToolListChanged();
 
-          return {
-            content: [textItem(`${enabled ? 'Enabled' : 'Disabled'} dynamic tool: ${name}`)],
-            structuredContent: {
-              tool: this.toToolView(updated, false)
-            }
-          };
-        } catch (error) {
-          return toErrorResult(error);
-        }
+            return {
+              content: [textItem(`${enabled ? 'Enabled' : 'Disabled'} dynamic tool: ${name}`)],
+              structuredContent: {
+                tool: this.toToolView(updated, false)
+              }
+            };
+          } catch (error) {
+            return toErrorResult(error);
+          }
+        });
       }
     );
   }
@@ -274,7 +290,9 @@ export class DynamicToolService {
         inputSchema: DynamicInvocationSchema
       },
       async ({ args }) => {
-        return this.executionEngine.execute(record, args);
+        return this.guarded(`dynamic.exec.${record.name}`, async () => {
+          return this.executionEngine.execute(record, args);
+        });
       }
     );
 
@@ -325,6 +343,14 @@ export class DynamicToolService {
     }
 
     return view;
+  }
+
+  private async guarded(scope: string, work: () => Promise<CallToolResult>): Promise<CallToolResult> {
+    try {
+      return await this.executionGuard.run(scope, work);
+    } catch (error) {
+      return toErrorResult(error);
+    }
   }
 }
 

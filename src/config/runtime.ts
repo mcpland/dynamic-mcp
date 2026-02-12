@@ -27,6 +27,11 @@ export interface RuntimeConfig {
     sessionTimeoutSeconds: number;
     maxSessions: number;
   };
+  security: {
+    toolMaxConcurrency: number;
+    toolMaxCallsPerWindow: number;
+    toolRateWindowMs: number;
+  };
 }
 
 type ArgMap = Record<string, string>;
@@ -99,6 +104,23 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
         args['sandbox-max-sessions'] ?? env.MCP_SANDBOX_MAX_SESSIONS ?? '20',
         'MCP sandbox max sessions',
         1000
+      )
+    },
+    security: {
+      toolMaxConcurrency: parsePositiveInteger(
+        args['tool-max-concurrency'] ?? env.MCP_TOOL_MAX_CONCURRENCY ?? '8',
+        'MCP tool max concurrency',
+        10_000
+      ),
+      toolMaxCallsPerWindow: parsePositiveInteger(
+        args['tool-max-calls-per-window'] ?? env.MCP_TOOL_MAX_CALLS_PER_WINDOW ?? '300',
+        'MCP tool max calls per window',
+        1_000_000
+      ),
+      toolRateWindowMs: parsePositiveInteger(
+        args['tool-rate-window-ms'] ?? env.MCP_TOOL_RATE_WINDOW_MS ?? '60000',
+        'MCP tool rate window',
+        86_400_000
       )
     }
   };

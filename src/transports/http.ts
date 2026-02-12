@@ -37,6 +37,11 @@ interface HttpServerOptions {
     sessionTimeoutSeconds: number;
     maxSessions: number;
   };
+  security: {
+    toolMaxConcurrency: number;
+    toolMaxCallsPerWindow: number;
+    toolRateWindowMs: number;
+  };
 }
 
 interface Session {
@@ -81,7 +86,11 @@ export async function startHttpTransport(
   };
 
   const createSessionTransport = async (): Promise<StreamableHTTPServerTransport> => {
-    const server = await createMcpServer({ dynamic: options.dynamic, sandbox: options.sandbox });
+    const server = await createMcpServer({
+      dynamic: options.dynamic,
+      sandbox: options.sandbox,
+      security: options.security
+    });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (sessionId) => {
