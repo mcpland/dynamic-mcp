@@ -10,6 +10,7 @@ import type { Request, Response } from 'express';
 
 import { JwtAuthVerifier } from '../auth/jwt.js';
 import type { AuditLogger } from '../audit/logger.js';
+import { getSharedPostgresPool } from '../dynamic/postgres-pool.js';
 import { createMcpServer } from '../server/create-server.js';
 
 export interface HttpTransportConfig {
@@ -72,6 +73,7 @@ export async function startHttpTransport(
   options: HttpServerOptions
 ): Promise<HttpServerHandle> {
   const app = createMcpExpressApp({ host: config.host });
+  const readinessCheck = createReadinessCheck(options.dynamic);
   const jwtVerifier =
     options.auth.mode === 'jwt' && options.auth.jwt
       ? new JwtAuthVerifier({
@@ -223,6 +225,24 @@ export async function startHttpTransport(
   app.post(config.path, postHandler);
   app.get(config.path, getHandler);
   app.delete(config.path, deleteHandler);
+  app.get('/livez', (_req, res) => {
+    res.status(200).json({
+      status: 'ok'
+    });
+  });
+  app.get('/readyz', async (_req, res) => {
+    try {
+      await readinessCheck();
+      res.status(200).json({
+        status: 'ready'
+      });
+    } catch (error) {
+      res.status(503).json({
+        status: 'not_ready',
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
 
   const httpServer = await listen(app, config.host, config.port);
 
@@ -347,4 +367,21 @@ function closeServer(server: HttpServer): Promise<void> {
       resolve();
     });
   });
+}
+
+function createReadinessCheck(dynamic: HttpServerOptions['dynamic']): () => Promise<void> {
+  if (dynamic.backend === 'postgres') {
+    if (!dynamic.postgres) {
+      return async () => {
+        throw new Error('Missing postgres dynamic registry config.');
+      };
+    }
+
+    const pool = getSharedPostgresPool(dynamic.postgres.connectionString);
+    return async () => {
+      await pool.query('SELECT 1');
+    };
+  }
+
+  return async () => Promise.resolve();
 }

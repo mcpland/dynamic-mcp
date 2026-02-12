@@ -53,6 +53,11 @@ npm run dev:http
 
 Default endpoint: `http://127.0.0.1:8788/mcp`
 
+Health probes:
+
+- `GET /livez` -> process liveness
+- `GET /readyz` -> backend readiness (checks dynamic registry backend dependencies)
+
 ## Environment variables
 
 See `.env.example`.
