@@ -9,13 +9,13 @@ async function main(): Promise<void> {
   const config = loadRuntimeConfig();
 
   if (config.transport === 'stdio') {
-    const server = createMcpServer();
+    const server = await createMcpServer({ dynamic: config.dynamic });
     await startStdioTransport(server);
     console.error('[dynamic-mcp] running in stdio mode');
     return;
   }
 
-  const serverHandle = await startHttpTransport(config.http);
+  const serverHandle = await startHttpTransport(config.http, { dynamic: config.dynamic });
   console.error(
     `[dynamic-mcp] running in http mode at http://${config.http.host}:${config.http.port}${config.http.path}`
   );

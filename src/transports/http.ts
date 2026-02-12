@@ -19,12 +19,23 @@ export interface HttpServerHandle {
   stop: () => Promise<void>;
 }
 
+interface HttpServerOptions {
+  dynamic: {
+    storeFilePath: string;
+    maxTools: number;
+    adminToken?: string;
+  };
+}
+
 interface Session {
   server: McpServer;
   transport: StreamableHTTPServerTransport;
 }
 
-export async function startHttpTransport(config: HttpTransportConfig): Promise<HttpServerHandle> {
+export async function startHttpTransport(
+  config: HttpTransportConfig,
+  options: HttpServerOptions
+): Promise<HttpServerHandle> {
   const app = createMcpExpressApp({ host: config.host });
   const sessions = new Map<string, Session>();
   const closingSessions = new Set<string>();
@@ -58,7 +69,7 @@ export async function startHttpTransport(config: HttpTransportConfig): Promise<H
   };
 
   const createSessionTransport = async (): Promise<StreamableHTTPServerTransport> => {
-    const server = createMcpServer();
+    const server = await createMcpServer({ dynamic: options.dynamic });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (sessionId) => {

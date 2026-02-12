@@ -1,7 +1,12 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-const serviceVersion = '0.1.0';
+import { DisabledDynamicToolExecutionEngine, type DynamicToolExecutionEngine } from '../dynamic/executor.js';
+import { DynamicToolRegistry } from '../dynamic/registry.js';
+import { DynamicToolService } from '../dynamic/service.js';
+
+const serviceVersion = '0.2.0';
 
 const HealthOutputSchema = z.object({
   status: z.literal('ok'),
@@ -30,7 +35,16 @@ const TimeOutputSchema = z.object({
   timeZone: z.string()
 });
 
-export function createMcpServer(): McpServer {
+export interface CreateMcpServerOptions {
+  dynamic: {
+    storeFilePath: string;
+    maxTools: number;
+    adminToken?: string;
+  };
+  dynamicExecutionEngine?: DynamicToolExecutionEngine;
+}
+
+export async function createMcpServer(options: CreateMcpServerOptions): Promise<McpServer> {
   const startedAt = Date.now();
 
   const server = new McpServer(
@@ -53,7 +67,7 @@ export function createMcpServer(): McpServer {
       description: 'Return server liveness and uptime info',
       outputSchema: HealthOutputSchema
     },
-    async () => {
+    async (): Promise<CallToolResult> => {
       const output = {
         status: 'ok' as const,
         service: 'dynamic-mcp',
@@ -81,7 +95,7 @@ export function createMcpServer(): McpServer {
       inputSchema: EchoInputSchema,
       outputSchema: EchoOutputSchema
     },
-    async ({ message, uppercase }) => {
+    async ({ message, uppercase }): Promise<CallToolResult> => {
       const normalized = uppercase ? message.toUpperCase() : message;
       const output = {
         message: normalized,
@@ -108,7 +122,7 @@ export function createMcpServer(): McpServer {
       inputSchema: TimeInputSchema,
       outputSchema: TimeOutputSchema
     },
-    async ({ timeZone }) => {
+    async ({ timeZone }): Promise<CallToolResult> => {
       const effectiveTimeZone = timeZone ?? 'UTC';
 
       if (!isValidTimeZone(effectiveTimeZone)) {
@@ -193,6 +207,19 @@ export function createMcpServer(): McpServer {
       };
     }
   );
+
+  const registry = new DynamicToolRegistry({
+    filePath: options.dynamic.storeFilePath,
+    maxTools: options.dynamic.maxTools
+  });
+
+  const dynamicService = new DynamicToolService({
+    server,
+    registry,
+    executionEngine: options.dynamicExecutionEngine ?? new DisabledDynamicToolExecutionEngine(),
+    adminToken: options.dynamic.adminToken
+  });
+  await dynamicService.initialize();
 
   return server;
 }
