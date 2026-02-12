@@ -24,6 +24,8 @@ export interface RuntimeConfig {
     maxTimeoutMs: number;
     allowedImages: string[];
     blockedPackages: string[];
+    sessionTimeoutSeconds: number;
+    maxSessions: number;
   };
 }
 
@@ -85,7 +87,19 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
         300_000
       ),
       allowedImages,
-      blockedPackages
+      blockedPackages,
+      sessionTimeoutSeconds: parsePositiveInteger(
+        args['sandbox-session-timeout-seconds'] ??
+          env.MCP_SANDBOX_SESSION_TIMEOUT_SECONDS ??
+          '1800',
+        'MCP sandbox session timeout seconds',
+        172_800
+      ),
+      maxSessions: parsePositiveInteger(
+        args['sandbox-max-sessions'] ?? env.MCP_SANDBOX_MAX_SESSIONS ?? '20',
+        'MCP sandbox max sessions',
+        1000
+      )
     }
   };
 }

@@ -14,6 +14,8 @@ describe('loadRuntimeConfig', () => {
     expect(config.dynamic.maxTools).toBe(256);
     expect(config.sandbox.memoryLimit).toBe('512m');
     expect(config.sandbox.allowedImages).toEqual(['node:lts-slim']);
+    expect(config.sandbox.sessionTimeoutSeconds).toBe(1800);
+    expect(config.sandbox.maxSessions).toBe(20);
   });
 
   it('reads CLI flags and normalizes path', () => {

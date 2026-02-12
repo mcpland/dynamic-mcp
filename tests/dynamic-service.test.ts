@@ -34,7 +34,9 @@ describe('dynamic tool service', () => {
         maxOutputBytes: 200_000,
         maxTimeoutMs: 60_000,
         allowedImages: ['node:lts-slim'],
-        blockedPackages: []
+        blockedPackages: [],
+        sessionTimeoutSeconds: 1_800,
+        maxSessions: 20
       }
     });
     const client = new Client({ name: 'test-client', version: '1.0.0' });

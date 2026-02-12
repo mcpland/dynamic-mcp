@@ -33,7 +33,9 @@ describe('createMcpServer', () => {
         maxOutputBytes: 200_000,
         maxTimeoutMs: 60_000,
         allowedImages: ['node:lts-slim'],
-        blockedPackages: []
+        blockedPackages: [],
+        sessionTimeoutSeconds: 1_800,
+        maxSessions: 20
       }
     });
     const client = new Client({ name: 'test-client', version: '1.0.0' });
@@ -50,6 +52,10 @@ describe('createMcpServer', () => {
     expect(toolNames).toContain('system.health');
     expect(toolNames).toContain('dev.echo');
     expect(toolNames).toContain('time.now');
+    expect(toolNames).toContain('sandbox.initialize');
+    expect(toolNames).toContain('sandbox.exec');
+    expect(toolNames).toContain('sandbox.run_js');
+    expect(toolNames).toContain('sandbox.stop');
 
     const result = await client.callTool({
       name: 'dev.echo',

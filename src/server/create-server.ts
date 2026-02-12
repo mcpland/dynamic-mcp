@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { DockerDynamicToolExecutionEngine } from '../dynamic/docker-executor.js';
 import { DynamicToolRegistry } from '../dynamic/registry.js';
 import { DynamicToolService } from '../dynamic/service.js';
+import { registerSessionSandboxTools } from '../sandbox/register-session-tools.js';
 
 const serviceVersion = '0.2.0';
 
@@ -50,6 +51,8 @@ export interface CreateMcpServerOptions {
     maxTimeoutMs: number;
     allowedImages: string[];
     blockedPackages: string[];
+    sessionTimeoutSeconds: number;
+    maxSessions: number;
   };
 }
 
@@ -230,6 +233,19 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
     adminToken: options.dynamic.adminToken
   });
   await dynamicService.initialize();
+
+  registerSessionSandboxTools(server, {
+    dockerBinary: options.sandbox.dockerBinary,
+    memoryLimit: options.sandbox.memoryLimit,
+    cpuLimit: options.sandbox.cpuLimit,
+    maxDependencies: options.sandbox.maxDependencies,
+    maxOutputBytes: options.sandbox.maxOutputBytes,
+    maxTimeoutMs: options.sandbox.maxTimeoutMs,
+    allowedImages: options.sandbox.allowedImages,
+    blockedPackages: options.sandbox.blockedPackages,
+    sessionTimeoutSeconds: options.sandbox.sessionTimeoutSeconds,
+    maxSessions: options.sandbox.maxSessions
+  });
 
   return server;
 }

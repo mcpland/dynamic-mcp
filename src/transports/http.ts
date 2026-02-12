@@ -34,6 +34,8 @@ interface HttpServerOptions {
     maxTimeoutMs: number;
     allowedImages: string[];
     blockedPackages: string[];
+    sessionTimeoutSeconds: number;
+    maxSessions: number;
   };
 }
 
