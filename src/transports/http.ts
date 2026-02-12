@@ -10,7 +10,7 @@ import type { Request, Response } from 'express';
 
 import { JwtAuthVerifier } from '../auth/jwt.js';
 import type { AuditLogger } from '../audit/logger.js';
-import { getSharedPostgresPool } from '../dynamic/postgres-pool.js';
+import { closeAllSharedPostgresPools, getSharedPostgresPool } from '../dynamic/postgres-pool.js';
 import { createMcpServer } from '../server/create-server.js';
 
 export interface HttpTransportConfig {
@@ -253,6 +253,7 @@ export async function startHttpTransport(
       }
 
       await closeServer(httpServer);
+      await closeAllSharedPostgresPools();
     }
   };
 }
