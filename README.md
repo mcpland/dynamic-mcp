@@ -164,6 +164,12 @@ Kubernetes baseline manifest:
 kubectl apply -f deploy/k8s/dynamic-mcp-postgres.yaml
 ```
 
+Optional scalability policies (HPA + PDB):
+
+```bash
+kubectl apply -f deploy/k8s/dynamic-mcp-scalability.yaml
+```
+
 Before applying k8s manifests, update:
 
 - `image` in `deploy/k8s/dynamic-mcp-postgres.yaml`
