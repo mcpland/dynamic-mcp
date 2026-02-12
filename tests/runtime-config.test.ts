@@ -22,6 +22,8 @@ describe('loadRuntimeConfig', () => {
     expect(config.auth.mode).toBe('none');
     expect(config.audit.enabled).toBe(true);
     expect(config.audit.filePath.endsWith('.dynamic-mcp/audit.log')).toBe(true);
+    expect(config.audit.maxFileBytes).toBe(10_000_000);
+    expect(config.audit.maxFiles).toBe(5);
   });
 
   it('reads CLI flags and normalizes path', () => {
@@ -95,5 +97,15 @@ describe('loadRuntimeConfig', () => {
     expect(() => loadRuntimeConfig(['--dynamic-backend', 'postgres'], {})).toThrow(
       /MCP_DYNAMIC_PG_URL/
     );
+  });
+
+  it('loads audit rotation config values', () => {
+    const config = loadRuntimeConfig(
+      ['--audit-max-file-bytes', '2048', '--audit-max-files', '7'],
+      {}
+    );
+
+    expect(config.audit.maxFileBytes).toBe(2048);
+    expect(config.audit.maxFiles).toBe(7);
   });
 });

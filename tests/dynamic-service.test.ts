@@ -155,6 +155,8 @@ function createTestAuditLogger(): AuditLogger {
     enabled: false,
     filePath: '/tmp/dynamic-mcp-test-audit.log',
     maxEventBytes: 10_000,
+    maxFileBytes: 100_000,
+    maxFiles: 3,
     service: 'dynamic-mcp-test',
     serviceVersion: 'test'
   });

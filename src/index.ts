@@ -12,6 +12,8 @@ async function main(): Promise<void> {
     enabled: config.audit.enabled,
     filePath: config.audit.filePath,
     maxEventBytes: config.audit.maxEventBytes,
+    maxFileBytes: config.audit.maxFileBytes,
+    maxFiles: config.audit.maxFiles,
     service: 'dynamic-mcp',
     serviceVersion: '0.3.0'
   });

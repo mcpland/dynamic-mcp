@@ -87,6 +87,8 @@ Key vars:
 - `MCP_AUDIT_ENABLED`
 - `MCP_AUDIT_FILE`
 - `MCP_AUDIT_MAX_EVENT_BYTES`
+- `MCP_AUDIT_MAX_FILE_BYTES`
+- `MCP_AUDIT_MAX_FILES`
 
 ## Dynamic tool code contract
 

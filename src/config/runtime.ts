@@ -50,6 +50,8 @@ export interface RuntimeConfig {
     enabled: boolean;
     filePath: string;
     maxEventBytes: number;
+    maxFileBytes: number;
+    maxFiles: number;
   };
 }
 
@@ -160,6 +162,16 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
         args['audit-max-event-bytes'] ?? env.MCP_AUDIT_MAX_EVENT_BYTES ?? '20000',
         'MCP audit max event bytes',
         1_000_000
+      ),
+      maxFileBytes: parsePositiveInteger(
+        args['audit-max-file-bytes'] ?? env.MCP_AUDIT_MAX_FILE_BYTES ?? '10000000',
+        'MCP audit max file bytes',
+        1_000_000_000
+      ),
+      maxFiles: parsePositiveInteger(
+        args['audit-max-files'] ?? env.MCP_AUDIT_MAX_FILES ?? '5',
+        'MCP audit max files',
+        100
       )
     }
   };
