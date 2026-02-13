@@ -39,6 +39,7 @@ A production-oriented **dynamic MCP server** in Node.js, with secure Docker sand
 - Structured JSONL audit logging for privileged/runtime actions.
 - Optimistic concurrency control for dynamic tool writes (`expectedRevision`).
 - Graceful shared Postgres pool shutdown on HTTP transport stop.
+- Graceful shutdown hooks for both HTTP and stdio transports.
 
 ## Quick start
 

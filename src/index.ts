@@ -2,6 +2,7 @@
 
 import { AuditLogger } from './audit/logger.js';
 import { loadRuntimeConfig } from './config/runtime.js';
+import { closeAllSharedPostgresPools } from './dynamic/postgres-pool.js';
 import { createMcpServer } from './server/create-server.js';
 import { startHttpTransport } from './transports/http.js';
 import { startStdioTransport } from './transports/stdio.js';
@@ -25,6 +26,9 @@ async function main(): Promise<void> {
       security: config.security,
       auditLogger
     });
+    installShutdownHandlers(async () => {
+      await server.close();
+    });
     await startStdioTransport(server);
     console.error('[dynamic-mcp] running in stdio mode');
     return;
@@ -41,17 +45,37 @@ async function main(): Promise<void> {
     `[dynamic-mcp] running in http mode at http://${config.http.host}:${config.http.port}${config.http.path}`
   );
 
-  const shutdown = async (): Promise<void> => {
+  installShutdownHandlers(async () => {
     await serverHandle.stop();
+  });
+}
+
+function installShutdownHandlers(stopTransport: () => Promise<void>): void {
+  let shuttingDown = false;
+  const shutdown = async (signal: 'SIGINT' | 'SIGTERM'): Promise<void> => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+
+    try {
+      await stopTransport();
+      await closeAllSharedPostgresPools();
+    } catch (error) {
+      console.error(`[dynamic-mcp] ${signal} shutdown error:`, error);
+      process.exit(1);
+      return;
+    }
+
     process.exit(0);
   };
 
   process.on('SIGINT', () => {
-    void shutdown();
+    void shutdown('SIGINT');
   });
 
   process.on('SIGTERM', () => {
-    void shutdown();
+    void shutdown('SIGTERM');
   });
 }
 
