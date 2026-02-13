@@ -157,13 +157,14 @@ describe('createMcpServer', () => {
     expect(toolNames).not.toContain('system.runtime_config');
     expect(toolNames).not.toContain('sandbox.initialize');
 
-    const quickRun = await client.callTool({
-      name: 'run_js_ephemeral',
-      arguments: {
-        code: 'return { ok: true };'
-      }
+    const health = await client.callTool({
+      name: 'system.health'
     });
-    expect(quickRun.content[0]?.type).toBe('text');
+    expect(health.isError).not.toBe(true);
+    expect(health.structuredContent).toMatchObject({
+      status: 'ok',
+      service: 'dynamic-mcp'
+    });
   });
 });
 

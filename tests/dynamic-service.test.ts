@@ -49,25 +49,19 @@ describe('dynamic tool service', () => {
     const tools = await client.listTools();
     expect(tools.tools.some((tool) => tool.name === 'dynamic.hello')).toBe(true);
 
-    const runResult = await client.callTool({
-      name: 'dynamic.hello',
+    const toolGet = await client.callTool({
+      name: 'dynamic.tool.get',
       arguments: {
-        args: {
-          name: 'world'
-        }
+        name: 'dynamic.hello'
       }
     });
-
-    expect(runResult.isError).toBe(true);
-    expect(runResult.content[0]?.type).toBe('text');
-
-    const quickRun = await client.callTool({
-      name: 'run_js_ephemeral',
-      arguments: {
-        code: 'return { hello: "world" };'
+    expect(toolGet.isError).not.toBe(true);
+    expect(toolGet.structuredContent).toMatchObject({
+      tool: {
+        name: 'dynamic.hello',
+        description: 'hello dynamic'
       }
     });
-    expect(quickRun.content[0]?.type).toBe('text');
 
     const firstUpdate = await client.callTool({
       name: 'dynamic.tool.update',
