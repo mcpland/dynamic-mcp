@@ -84,6 +84,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate compose file
+        run: docker compose -f deploy/docker-compose.postgres.yml config -q
+
       - name: Start compose stack
         run: docker compose -f deploy/docker-compose.postgres.yml up -d --build
 
@@ -111,3 +114,19 @@ jobs:
       - name: Teardown
         if: always()
         run: docker compose -f deploy/docker-compose.postgres.yml down -v --remove-orphans
+
+  k8s-manifest-validate:
+    runs-on: ubuntu-latest
+    needs: verify
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Validate k8s manifests (client dry-run)
+        run: |
+          kubectl apply --dry-run=client -f deploy/k8s/dynamic-mcp-postgres.yaml
+          kubectl apply --dry-run=client -f deploy/k8s/dynamic-mcp-scalability.yaml

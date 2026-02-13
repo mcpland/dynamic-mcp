@@ -149,6 +149,8 @@ CI now includes:
 - Node verify matrix (`lint`, `test`, `build`)
 - HTTP Docker image smoke (`/livez`, `/readyz`)
 - Postgres compose smoke (`deploy/docker-compose.postgres.yml`)
+- Compose spec validation (`docker compose config -q`)
+- Kubernetes manifest dry-run validation (`kubectl --dry-run=client`)
 
 Run container:
 
