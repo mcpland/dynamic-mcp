@@ -36,16 +36,209 @@ pnpm run dev:enterprise
 
 HTTP mode default endpoint: `http://127.0.0.1:8788/mcp`
 
+## MCP Server Configuration
+
+This project supports both MCP standard transports:
+
+- `stdio` (recommended for local development/CLI clients)
+- Streamable HTTP (recommended for remote/network deployment)
+
+### 1. Prepare Runtime for Client Config
+
+Most MCP clients launch your server as a child process in `stdio` mode, so build once before wiring client config:
+
+```bash
+pnpm install
+pnpm build
+```
+
+Use an absolute path to `dist/index.js` in client config. Example:
+
+```bash
+node /ABS/PATH/TO/dynamic-mcp/dist/index.js --transport stdio --profile mvp
+```
+
+Dynamic code execution features (registered dynamic tools, `run_js_ephemeral`, `sandbox.*`) require a reachable Docker daemon.
+
+### 2. Claude Desktop (Local stdio)
+
+Claude Desktop uses a local `claude_desktop_config.json` file with `mcpServers`.
+
+macOS path:
+`~/Library/Application Support/Claude/claude_desktop_config.json`
+
+Windows path:
+`%APPDATA%\Claude\claude_desktop_config.json`
+
+Example:
+
+```json
+{
+  "mcpServers": {
+    "dynamic-mcp": {
+      "command": "node",
+      "args": [
+        "/ABS/PATH/TO/dynamic-mcp/dist/index.js",
+        "--transport",
+        "stdio",
+        "--profile",
+        "mvp"
+      ],
+      "env": {
+        "MCP_DYNAMIC_BACKEND": "file",
+        "MCP_DYNAMIC_STORE": "/ABS/PATH/TO/dynamic-mcp/.dynamic-mcp/tools.json",
+        "MCP_SANDBOX_DOCKER_BIN": "docker"
+      }
+    }
+  }
+}
+```
+
+Note: Claude Desktop remote MCP server management is done in app settings (`Settings -> Connectors`), not in `claude_desktop_config.json`.
+
+### 3. Claude Code
+
+Add local stdio server:
+
+```bash
+claude mcp add dynamic-mcp -- node /ABS/PATH/TO/dynamic-mcp/dist/index.js --transport stdio --profile mvp
+```
+
+Add remote HTTP server:
+
+```bash
+claude mcp add --transport http dynamic-mcp-http http://127.0.0.1:8788/mcp
+```
+
+Project-level `.mcp.json` example (supports both local and remote server definitions):
+
+```json
+{
+  "mcpServers": {
+    "dynamic-mcp-local": {
+      "command": "node",
+      "args": [
+        "/ABS/PATH/TO/dynamic-mcp/dist/index.js",
+        "--transport",
+        "stdio",
+        "--profile",
+        "enterprise"
+      ]
+    },
+    "dynamic-mcp-http": {
+      "type": "http",
+      "url": "http://127.0.0.1:8788/mcp",
+      "authorization_token": "${DYNAMIC_MCP_JWT_TOKEN}"
+    }
+  }
+}
+```
+
+Claude Code supports environment variable expansion in config values, including `${VAR}` and `${VAR:-default}`.
+
+### 4. VS Code
+
+Use workspace config file: `.vscode/mcp.json`.
+
+Local stdio example:
+
+```json
+{
+  "servers": {
+    "dynamic-mcp": {
+      "command": "node",
+      "args": [
+        "/ABS/PATH/TO/dynamic-mcp/dist/index.js",
+        "--transport",
+        "stdio",
+        "--profile",
+        "mvp"
+      ],
+      "env": {
+        "MCP_DYNAMIC_BACKEND": "file",
+        "MCP_SANDBOX_DOCKER_BIN": "docker"
+      }
+    }
+  }
+}
+```
+
+Remote HTTP + JWT header example:
+
+```json
+{
+  "servers": {
+    "dynamic-mcp-http": {
+      "url": "http://127.0.0.1:8788/mcp",
+      "headers": {
+        "Authorization": "Bearer ${input:dynamic_mcp_jwt}"
+      }
+    }
+  },
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "dynamic_mcp_jwt",
+      "description": "JWT Bearer token for dynamic-mcp"
+    }
+  ]
+}
+```
+
+### 5. HTTP Mode Details for This Repo
+
+Server startup example:
+
+```bash
+pnpm run dev:http
+# or:
+node /ABS/PATH/TO/dynamic-mcp/dist/index.js --transport http --host 127.0.0.1 --port 8788 --path /mcp
+```
+
+In HTTP mode, the server runs as an independent process/container, and MCP clients connect to the configured URL.
+
+HTTP endpoints:
+
+- `POST /mcp` initialize/continue MCP session
+- `GET /mcp` session stream
+- `DELETE /mcp` close session
+- `GET /livez` liveness
+- `GET /readyz` readiness
+- `GET /metrics` Prometheus metrics
+
+JWT behavior in this repo:
+
+- When `MCP_AUTH_MODE=jwt`, authentication is enforced on MCP endpoint requests (`${MCP_PATH}`, default `/mcp`).
+- `/livez`, `/readyz`, `/metrics` remain anonymous by default.
+
+Production recommendation: keep `/livez`, `/readyz`, `/metrics` behind private networking, ingress allowlists, or a gateway even when JWT is enabled.
+
+### 6. Minimal Secure Baseline (Recommended)
+
+```bash
+MCP_TRANSPORT=http
+MCP_HOST=0.0.0.0
+MCP_PORT=8788
+MCP_PATH=/mcp
+MCP_AUTH_MODE=jwt
+MCP_AUTH_JWKS_URL=https://your-idp.example.com/.well-known/jwks.json
+MCP_AUTH_ISSUER=https://your-idp.example.com/
+MCP_AUTH_AUDIENCE=dynamic-mcp
+MCP_AUTH_REQUIRED_SCOPES=mcp.invoke
+```
+
+Full variable reference: [docs/configuration.md](docs/configuration.md)
+
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [Architecture](docs/architecture.md) | System design, module structure, and data flow |
-| [Configuration](docs/configuration.md) | All environment variables and CLI arguments |
-| [API Reference](docs/api-reference.md) | Complete tool, resource, and prompt reference |
-| [Dynamic Tools Guide](docs/dynamic-tools.md) | How to author and manage dynamic tools |
-| [Security](docs/security.md) | Security model, sandbox isolation, and authentication |
-| [Deployment](docs/deployment.md) | Docker, Compose, and Kubernetes deployment guides |
+| Document                                     | Description                                           |
+| -------------------------------------------- | ----------------------------------------------------- |
+| [Architecture](docs/architecture.md)         | System design, module structure, and data flow        |
+| [Configuration](docs/configuration.md)       | All environment variables and CLI arguments           |
+| [API Reference](docs/api-reference.md)       | Complete tool, resource, and prompt reference         |
+| [Dynamic Tools Guide](docs/dynamic-tools.md) | How to author and manage dynamic tools                |
+| [Security](docs/security.md)                 | Security model, sandbox isolation, and authentication |
+| [Deployment](docs/deployment.md)             | Docker, Compose, and Kubernetes deployment guides     |
 
 ## Profiles
 
@@ -53,34 +246,34 @@ HTTP mode default endpoint: `http://127.0.0.1:8788/mcp`
 
 Core dynamic tool engine:
 
-| Tool | Description |
-|------|-------------|
-| `dynamic.tool.create` | Register a new dynamic tool |
-| `dynamic.tool.update` | Modify an existing tool definition |
-| `dynamic.tool.delete` | Remove a tool |
-| `dynamic.tool.list` | List all registered tools |
-| `dynamic.tool.get` | Get a single tool definition |
-| `dynamic.tool.enable` | Enable or disable a tool |
-| `run_js_ephemeral` | One-off JavaScript execution in a sandbox |
-| `system.health` | Server liveness and uptime |
+| Tool                  | Description                               |
+| --------------------- | ----------------------------------------- |
+| `dynamic.tool.create` | Register a new dynamic tool               |
+| `dynamic.tool.update` | Modify an existing tool definition        |
+| `dynamic.tool.delete` | Remove a tool                             |
+| `dynamic.tool.list`   | List all registered tools                 |
+| `dynamic.tool.get`    | Get a single tool definition              |
+| `dynamic.tool.enable` | Enable or disable a tool                  |
+| `run_js_ephemeral`    | One-off JavaScript execution in a sandbox |
+| `system.health`       | Server liveness and uptime                |
 
 ### Enterprise
 
 Everything in MVP, plus:
 
-| Tool / Resource | Description |
-|-----------------|-------------|
-| `sandbox.initialize` | Create a reusable container session |
-| `sandbox.exec` | Run shell commands in a session |
-| `sandbox.run_js` | Run JavaScript in a session |
-| `sandbox.stop` | Stop a session container |
-| `sandbox.session.list` | List active sessions |
-| `system.guard_metrics` | Concurrency/rate-limit counters |
-| `system.runtime_config` | Sanitized config snapshot |
-| `dynamic://metrics/guard` | Guard metrics resource |
-| `dynamic://service/runtime-config` | Config snapshot resource |
-| `dynamic://service/meta` | Service metadata resource |
-| `tool-call-checklist` | Reusable pre-call checklist prompt |
+| Tool / Resource                    | Description                         |
+| ---------------------------------- | ----------------------------------- |
+| `sandbox.initialize`               | Create a reusable container session |
+| `sandbox.exec`                     | Run shell commands in a session     |
+| `sandbox.run_js`                   | Run JavaScript in a session         |
+| `sandbox.stop`                     | Stop a session container            |
+| `sandbox.session.list`             | List active sessions                |
+| `system.guard_metrics`             | Concurrency/rate-limit counters     |
+| `system.runtime_config`            | Sanitized config snapshot           |
+| `dynamic://metrics/guard`          | Guard metrics resource              |
+| `dynamic://service/runtime-config` | Config snapshot resource            |
+| `dynamic://service/meta`           | Service metadata resource           |
+| `tool-call-checklist`              | Reusable pre-call checklist prompt  |
 
 ## Example: Creating a Dynamic Tool
 
@@ -114,7 +307,7 @@ docker build -t dynamic-mcp:latest .
 docker run --rm -p 8788:8788 dynamic-mcp:latest
 ```
 
-For dynamic tool execution (`dynamic.exec.*`, `run_js_ephemeral`, `sandbox.*`) in containerized deployments, the running `dynamic-mcp` process must have:
+For dynamic tool execution (registered dynamic tools, `run_js_ephemeral`, `sandbox.*`) in containerized deployments, the running `dynamic-mcp` process must have:
 
 - A Docker CLI binary available in the container (`docker`)
 - Connectivity and authorization to a Docker daemon (local socket or remote daemon)
