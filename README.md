@@ -143,6 +143,12 @@ silently overwriting newer updates.
 - CI: `.github/workflows/ci.yml`
 - Dockerfile: `Dockerfile`
 
+CI now includes:
+
+- Node verify matrix (`lint`, `test`, `build`)
+- HTTP Docker image smoke (`/livez`, `/readyz`)
+- Postgres compose smoke (`deploy/docker-compose.postgres.yml`)
+
 Run container:
 
 ```bash
