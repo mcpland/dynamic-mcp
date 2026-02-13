@@ -1,5 +1,9 @@
 # dynamic-mcp
 
+![Node CI](https://github.com/mcpland/dynamic-mcp/workflows/Node%20CI/badge.svg)
+[![npm](https://img.shields.io/npm/v/dynamic-mcp.svg)](https://www.npmjs.com/package/dynamic-mcp)
+![license](https://img.shields.io/npm/l/dynamic-mcp)
+
 A production-grade **dynamic MCP server** for Node.js that enables runtime tool creation, management, and execution in isolated Docker sandboxes.
 
 Unlike static MCP servers that define tools at compile time, dynamic-mcp lets AI agents and operators create, update, and delete tools on the fly — each running in a hardened Docker container with full lifecycle management.
@@ -243,15 +247,15 @@ Production baseline assets:
 
 ## Documentation
 
-| Document                                     | Description                                           |
-| -------------------------------------------- | ----------------------------------------------------- |
-| [Architecture](docs/architecture.md)         | System design, module structure, and data flow        |
-| [Configuration](docs/configuration.md)       | All environment variables and CLI arguments           |
-| [API Reference](docs/api-reference.md)       | Complete tool, resource, and prompt reference         |
-| [Dynamic Tools Guide](docs/dynamic-tools.md) | How to author and manage dynamic tools                |
-| [Security](docs/security.md)                 | Security model, sandbox isolation, and authentication |
-| [Deployment](docs/deployment.md)             | Docker, Compose, and Kubernetes deployment guides     |
-| [Production Runbook](docs/production-runbook.md) | Production rollout, verification, and rollback steps |
+| Document                                         | Description                                           |
+| ------------------------------------------------ | ----------------------------------------------------- |
+| [Architecture](docs/architecture.md)             | System design, module structure, and data flow        |
+| [Configuration](docs/configuration.md)           | All environment variables and CLI arguments           |
+| [API Reference](docs/api-reference.md)           | Complete tool, resource, and prompt reference         |
+| [Dynamic Tools Guide](docs/dynamic-tools.md)     | How to author and manage dynamic tools                |
+| [Security](docs/security.md)                     | Security model, sandbox isolation, and authentication |
+| [Deployment](docs/deployment.md)                 | Docker, Compose, and Kubernetes deployment guides     |
+| [Production Runbook](docs/production-runbook.md) | Production rollout, verification, and rollback steps  |
 
 ## Profiles
 
@@ -360,4 +364,4 @@ pnpm run build        # compile TypeScript
 
 ## License
 
-See [LICENSE](LICENSE).
+MIT

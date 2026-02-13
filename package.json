@@ -1,8 +1,7 @@
 {
   "name": "dynamic-mcp",
   "version": "0.1.0",
-  "description": "Production-grade MCP server template with stdio and Streamable HTTP transports.",
-  "private": true,
+  "description": "A production-grade **dynamic MCP server** for Node.js that enables runtime tool creation, management, and execution in isolated Docker sandboxes",
   "type": "module",
   "packageManager": "pnpm@10.29.3",
   "engines": {
@@ -12,7 +11,8 @@
     "dynamic-mcp": "./dist/index.js"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "repository": {
     "type": "git",
