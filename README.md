@@ -1,236 +1,157 @@
 # dynamic-mcp
 
-A production-oriented **dynamic MCP server** in Node.js, with secure Docker sandbox execution and runtime tool management.
+A production-grade **dynamic MCP server** for Node.js that enables runtime tool creation, management, and execution in isolated Docker sandboxes.
 
-Default profile is `mvp` (`MCP_PROFILE=mvp`), focused on dynamic Node.js tool execution.
+Unlike static MCP servers that define tools at compile time, dynamic-mcp lets AI agents and operators create, update, and delete tools on the fly — each running in a hardened Docker container with full lifecycle management.
 
-## Core capabilities
+## Key Features
 
-- Dynamic tool control plane (`dynamic.tool.*`):
-  - `dynamic.tool.create`
-  - `dynamic.tool.update`
-  - `dynamic.tool.delete`
-  - `dynamic.tool.list`
-  - `dynamic.tool.get`
-  - `dynamic.tool.enable`
-- Dynamic tool runtime execution in isolated Docker containers.
-- Built-in one-off execution tool: `run_js_ephemeral`.
-- Global execution guard (concurrency + rate limit).
+- **Runtime tool management** — Create, update, delete, enable/disable tools without restarts via the `dynamic.tool.*` control plane
+- **Docker sandbox isolation** — Every tool execution runs in a locked-down container (read-only FS, dropped capabilities, PID/memory/CPU limits)
+- **Dual transport** — Stdio for local/CLI use, Streamable HTTP for networked deployments with per-session MCP servers
+- **Dual registry backend** — File-based (single node) or PostgreSQL (multi-instance) with optimistic concurrency control
+- **Execution guard** — Global concurrency and per-scope rate limiting to prevent abuse
+- **JWT authentication** — Optional JWKS-based token verification for HTTP mode
+- **Audit logging** — Structured JSONL logs with rotation, redaction of sensitive fields, and shutdown flush
+- **Two profiles** — `mvp` (default) for core functionality, `enterprise` for long-lived sandbox sessions, metrics, and ops tools
+- **Production-ready** — Health probes, Prometheus metrics, graceful shutdown, Kubernetes manifests, Docker Compose baselines
 
-## Enterprise profile extras
+## Quick Start
 
-Set `MCP_PROFILE=enterprise` to enable additional platform/ops features:
-
-- Reusable sandbox sessions:
-  - `sandbox.initialize`
-  - `sandbox.exec`
-  - `sandbox.run_js`
-  - `sandbox.stop`
-  - `sandbox.session.list`
-- Guard metrics resource/tool:
-  - resource: `dynamic://metrics/guard`
-  - tool: `system.guard_metrics`
-- Runtime config snapshot:
-  - resource: `dynamic://service/runtime-config`
-  - tool: `system.runtime_config`
-
-## Security model
-
-- Docker isolation for code execution.
-- Restricted container profile:
-  - `--read-only`
-  - `--cap-drop ALL`
-  - `--security-opt no-new-privileges`
-  - `--pids-limit`
-  - CPU/memory limits
-- Optional admin token (`MCP_ADMIN_TOKEN`) for dangerous operations.
-- Allowlist/denylist controls for images and npm packages.
-- Runtime guard for anti-abuse throttling.
-- Hardened HTTP response headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`).
-- HTTP request body size limit (`MCP_HTTP_MAX_REQUEST_BYTES`) for DoS resistance.
-- Optional JWT auth in HTTP mode (JWKS/issuer/audience/scope).
-- Structured JSONL audit logging for privileged/runtime actions.
-- Structured JSONL audit logging with shutdown flush guarantees.
-- Structured JSONL audit logging with sensitive field redaction.
-- Optimistic concurrency control for dynamic tool writes (`expectedRevision`).
-- Graceful shared Postgres pool shutdown on HTTP transport stop.
-- Graceful shutdown hooks for both HTTP and stdio transports.
-
-## Quick start
+**Prerequisites:** Node.js >= 20, pnpm, Docker
 
 ```bash
+# Install dependencies
 pnpm install
-pnpm run dev:mvp
-```
 
-HTTP mode:
+# Run in stdio mode (default, mvp profile)
+pnpm run dev
 
-```bash
+# Run in HTTP mode
 pnpm run dev:http
-```
 
-Enterprise profile:
-
-```bash
+# Run with enterprise profile
 pnpm run dev:enterprise
 ```
 
-Default endpoint: `http://127.0.0.1:8788/mcp`
+HTTP mode default endpoint: `http://127.0.0.1:8788/mcp`
 
-Health probes:
+## Documentation
 
-- `GET /livez` -> process liveness
-- `GET /readyz` -> backend readiness (checks dynamic registry backend dependencies)
-- `GET /metrics` -> Prometheus-style runtime metrics
-- All HTTP responses include `x-request-id` (propagated from request header if provided).
-- HTTP MCP sessions are auto-expired by `MCP_HTTP_SESSION_TTL_SECONDS`.
+| Document | Description |
+|----------|-------------|
+| [Architecture](docs/architecture.md) | System design, module structure, and data flow |
+| [Configuration](docs/configuration.md) | All environment variables and CLI arguments |
+| [API Reference](docs/api-reference.md) | Complete tool, resource, and prompt reference |
+| [Dynamic Tools Guide](docs/dynamic-tools.md) | How to author and manage dynamic tools |
+| [Security](docs/security.md) | Security model, sandbox isolation, and authentication |
+| [Deployment](docs/deployment.md) | Docker, Compose, and Kubernetes deployment guides |
 
-## Environment variables
+## Profiles
 
-See `.env.example`.
+### MVP (default)
 
-Key vars:
+Core dynamic tool engine:
 
-- `MCP_PROFILE` (`mvp` or `enterprise`)
-- `MCP_TRANSPORT`
-- `MCP_HTTP_SESSION_TTL_SECONDS`
-- `MCP_HTTP_MAX_REQUEST_BYTES`
-- `MCP_DYNAMIC_STORE`
-- `MCP_DYNAMIC_BACKEND` (`file` or `postgres`)
-- `MCP_DYNAMIC_PG_URL`
-- `MCP_DYNAMIC_PG_SCHEMA`
-- `MCP_DYNAMIC_PG_INIT_MAX_ATTEMPTS`
-- `MCP_DYNAMIC_PG_INIT_BACKOFF_MS`
-- `MCP_DYNAMIC_MAX_TOOLS`
-- `MCP_DYNAMIC_READ_ONLY`
-- `MCP_ADMIN_TOKEN`
-- `MCP_SANDBOX_ALLOWED_IMAGES`
-- `MCP_SANDBOX_BLOCKED_PACKAGES`
-- `MCP_SANDBOX_MEMORY_LIMIT`
-- `MCP_SANDBOX_CPU_LIMIT`
-- `MCP_TOOL_MAX_CONCURRENCY`
-- `MCP_TOOL_MAX_CALLS_PER_WINDOW`
-- `MCP_TOOL_RATE_WINDOW_MS`
-- `MCP_AUTH_MODE`
-- `MCP_AUTH_JWKS_URL`
-- `MCP_AUTH_ISSUER`
-- `MCP_AUTH_AUDIENCE`
-- `MCP_AUTH_REQUIRED_SCOPES`
-- `MCP_AUDIT_ENABLED`
-- `MCP_AUDIT_FILE`
-- `MCP_AUDIT_MAX_EVENT_BYTES`
-- `MCP_AUDIT_MAX_FILE_BYTES`
-- `MCP_AUDIT_MAX_FILES`
+| Tool | Description |
+|------|-------------|
+| `dynamic.tool.create` | Register a new dynamic tool |
+| `dynamic.tool.update` | Modify an existing tool definition |
+| `dynamic.tool.delete` | Remove a tool |
+| `dynamic.tool.list` | List all registered tools |
+| `dynamic.tool.get` | Get a single tool definition |
+| `dynamic.tool.enable` | Enable or disable a tool |
+| `run_js_ephemeral` | One-off JavaScript execution in a sandbox |
+| `system.health` | Server liveness and uptime |
 
-## Dynamic tool code contract
+### Enterprise
 
-`dynamic.tool.create` stores `code` as an async function body. At execution time it runs inside:
+Everything in MVP, plus:
 
-```js
-export async function run(args) {
-  // your code body
-}
-```
+| Tool / Resource | Description |
+|-----------------|-------------|
+| `sandbox.initialize` | Create a reusable container session |
+| `sandbox.exec` | Run shell commands in a session |
+| `sandbox.run_js` | Run JavaScript in a session |
+| `sandbox.stop` | Stop a session container |
+| `sandbox.session.list` | List active sessions |
+| `system.guard_metrics` | Concurrency/rate-limit counters |
+| `system.runtime_config` | Sanitized config snapshot |
+| `dynamic://metrics/guard` | Guard metrics resource |
+| `dynamic://service/runtime-config` | Config snapshot resource |
+| `dynamic://service/meta` | Service metadata resource |
+| `tool-call-checklist` | Reusable pre-call checklist prompt |
 
-Inside code, return any JSON-serializable value.
-
-Example code body:
-
-```js
-const { text } = args;
-return { upper: String(text).toUpperCase() };
-```
-
-Then invoke the tool with:
+## Example: Creating a Dynamic Tool
 
 ```json
 {
-  "args": { "text": "hello" }
+  "tool": {
+    "name": "text.uppercase",
+    "description": "Convert text to uppercase",
+    "code": "const { text } = args;\nreturn { upper: String(text).toUpperCase() };",
+    "dependencies": [],
+    "image": "node:lts-slim",
+    "timeoutMs": 10000
+  }
 }
 ```
 
-## Quick one-off JS
-
-Call built-in tool `run_js_ephemeral`:
+Then invoke it:
 
 ```json
 {
-  "code": "return { upper: String(args.text).toUpperCase() };",
-  "args": { "text": "hello" },
-  "dependencies": [],
-  "image": "node:lts-slim"
+  "args": { "text": "hello world" }
 }
 ```
 
-## Dynamic writes with revision safety
+See the [Dynamic Tools Guide](docs/dynamic-tools.md) for full details.
 
-Write operations (`dynamic.tool.update`, `dynamic.tool.enable`, `dynamic.tool.delete`) support
-optional `expectedRevision`.
-
-When provided, the server rejects stale writes with a revision conflict error instead of
-silently overwriting newer updates.
-
-## Scripts
-
-- `pnpm run dev`
-- `pnpm run dev:mvp`
-- `pnpm run dev:enterprise`
-- `pnpm run dev:stdio`
-- `pnpm run dev:http`
-- `pnpm run lint`
-- `pnpm run test`
-- `pnpm run build`
-- `pnpm run typecheck`
-
-## CI and Docker
-
-- CI: `.github/workflows/ci.yml`
-- Dockerfile: `Dockerfile`
-
-CI now includes:
-
-- Node verify matrix (`lint`, `test`, `build`)
-- HTTP Docker image smoke (`/livez`, `/readyz`)
-- Postgres compose smoke (`deploy/docker-compose.postgres.yml`)
-- Compose spec validation (`docker compose config -q`)
-- Kubernetes manifest dry-run validation (`kubectl --dry-run=client`)
-
-Run container:
+## Docker
 
 ```bash
 docker build -t dynamic-mcp:latest .
 docker run --rm -p 8788:8788 dynamic-mcp:latest
 ```
 
-## Deployment Baselines
+For dynamic tool execution (`dynamic.exec.*`, `run_js_ephemeral`, `sandbox.*`) in containerized deployments, the running `dynamic-mcp` process must have:
 
-Postgres-backed compose baseline:
+- A Docker CLI binary available in the container (`docker`)
+- Connectivity and authorization to a Docker daemon (local socket or remote daemon)
+
+Without that access, dynamic tool execution will fail at runtime.
+
+Security note: exposing the host Docker socket gives the container high privilege over the host. Prefer a dedicated remote Docker daemon with network isolation and TLS for production.
+
+## Docker Compose (with PostgreSQL)
 
 ```bash
 docker compose -f deploy/docker-compose.postgres.yml up -d --build
 ```
 
-Kubernetes baseline manifest:
+## Kubernetes
 
 ```bash
 kubectl apply -f deploy/k8s/dynamic-mcp-postgres.yaml
-```
-
-Optional scalability policies (HPA + PDB):
-
-```bash
+# Optional: HPA + PDB
 kubectl apply -f deploy/k8s/dynamic-mcp-scalability.yaml
-```
-
-Optional network hardening policy:
-
-```bash
+# Optional: Network policy
 kubectl apply -f deploy/k8s/dynamic-mcp-networkpolicy.yaml
 ```
 
-After applying, only pods labeled `mcp-client=true` can call port `8788` on `dynamic-mcp`.
+## Development
 
-Before applying k8s manifests, update:
+```bash
+pnpm run dev          # stdio mode, mvp profile
+pnpm run dev:mvp      # explicit mvp profile
+pnpm run dev:http     # HTTP mode
+pnpm run dev:enterprise  # enterprise profile
+pnpm run test         # run tests
+pnpm run lint         # lint
+pnpm run typecheck    # type check
+pnpm run build        # compile TypeScript
+```
 
-- `image` in `deploy/k8s/dynamic-mcp-postgres.yaml`
-- `MCP_DYNAMIC_PG_URL` secret value
+## License
+
+See [LICENSE](LICENSE).
