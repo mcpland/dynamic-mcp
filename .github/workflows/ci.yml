@@ -130,3 +130,4 @@ jobs:
         run: |
           kubectl apply --dry-run=client -f deploy/k8s/dynamic-mcp-postgres.yaml
           kubectl apply --dry-run=client -f deploy/k8s/dynamic-mcp-scalability.yaml
+          kubectl apply --dry-run=client -f deploy/k8s/dynamic-mcp-networkpolicy.yaml

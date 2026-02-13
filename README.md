@@ -180,6 +180,14 @@ Optional scalability policies (HPA + PDB):
 kubectl apply -f deploy/k8s/dynamic-mcp-scalability.yaml
 ```
 
+Optional network hardening policy:
+
+```bash
+kubectl apply -f deploy/k8s/dynamic-mcp-networkpolicy.yaml
+```
+
+After applying, only pods labeled `mcp-client=true` can call port `8788` on `dynamic-mcp`.
+
 Before applying k8s manifests, update:
 
 - `image` in `deploy/k8s/dynamic-mcp-postgres.yaml`
