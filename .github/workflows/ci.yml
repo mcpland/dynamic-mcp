@@ -96,51 +96,64 @@ jobs:
       - name: Prepare CI JWKS and JWT
         run: |
           mkdir -p .tmp/ci-jwt
-          python3 - <<'PY'
-          import base64
-          import hashlib
-          import hmac
-          import json
-          import pathlib
-          import time
+          node - <<'JS'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const crypto = require('node:crypto');
 
-          secret = b"dynamic-mcp-ci-shared-secret"
+          const outputDir = path.join('.tmp', 'ci-jwt');
 
-          def b64url(data: bytes) -> str:
-              return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+          const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+            modulusLength: 2048
+          });
+          const publicJwk = publicKey.export({ format: 'jwk' });
+          const kid = 'ci-rs256-key';
+          const now = Math.floor(Date.now() / 1000);
 
-          now = int(time.time())
-          header = {"alg": "HS256", "typ": "JWT", "kid": "ci-hs256-key"}
-          payload = {
-              "iss": "https://ci-issuer.example.com/",
-              "aud": "dynamic-mcp",
-              "sub": "ci-workflow",
-              "scope": "mcp.invoke",
-              "iat": now,
-              "exp": now + 600,
-          }
-          header_part = b64url(json.dumps(header, separators=(",", ":")).encode("utf-8"))
-          payload_part = b64url(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
-          signing_input = f"{header_part}.{payload_part}".encode("ascii")
-          signature = b64url(hmac.new(secret, signing_input, hashlib.sha256).digest())
-          token = f"{header_part}.{payload_part}.{signature}"
-
-          jwks = {
-              "keys": [
-                  {
-                      "kty": "oct",
-                      "kid": "ci-hs256-key",
-                      "alg": "HS256",
-                      "use": "sig",
-                      "k": b64url(secret),
-                  }
-              ]
+          function b64url(input) {
+            return Buffer.from(input)
+              .toString('base64')
+              .replace(/=/g, '')
+              .replace(/\+/g, '-')
+              .replace(/\//g, '_');
           }
 
-          output_dir = pathlib.Path(".tmp/ci-jwt")
-          (output_dir / "jwks.json").write_text(json.dumps(jwks), encoding="utf-8")
-          (output_dir / "token.txt").write_text(token, encoding="utf-8")
-          PY
+          const header = {
+            alg: 'RS256',
+            typ: 'JWT',
+            kid
+          };
+          const payload = {
+            iss: 'https://ci-issuer.example.com/',
+            aud: 'dynamic-mcp',
+            sub: 'ci-workflow',
+            scope: 'mcp.invoke',
+            iat: now,
+            exp: now + 600
+          };
+
+          const encodedHeader = b64url(JSON.stringify(header));
+          const encodedPayload = b64url(JSON.stringify(payload));
+          const signingInput = `${encodedHeader}.${encodedPayload}`;
+          const signature = crypto.sign('RSA-SHA256', Buffer.from(signingInput), privateKey);
+          const token = `${signingInput}.${b64url(signature)}`;
+
+          const jwks = {
+            keys: [
+              {
+                kty: 'RSA',
+                kid,
+                use: 'sig',
+                alg: 'RS256',
+                n: publicJwk.n,
+                e: publicJwk.e
+              }
+            ]
+          };
+
+          fs.writeFileSync(path.join(outputDir, 'jwks.json'), JSON.stringify(jwks), 'utf8');
+          fs.writeFileSync(path.join(outputDir, 'token.txt'), token, 'utf8');
+          JS
           echo "JWT_TOKEN=$(cat .tmp/ci-jwt/token.txt)" >> "$GITHUB_ENV"
 
       - name: Start JWKS server
