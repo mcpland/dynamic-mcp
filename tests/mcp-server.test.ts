@@ -102,6 +102,59 @@ describe('createMcpServer', () => {
       }
     });
   });
+
+  it('keeps the default mvp profile surface minimal', async () => {
+    const storeRoot = await mkdtemp(join(tmpdir(), 'dynamic-mcp-server-mvp-test-'));
+    const server = await createMcpServer({
+      profile: 'mvp',
+      dynamic: {
+        backend: 'file',
+        storeFilePath: join(storeRoot, 'tools.json'),
+        maxTools: 32,
+        readOnly: false
+      },
+      sandbox: {
+        dockerBinary: 'docker',
+        memoryLimit: '512m',
+        cpuLimit: '1',
+        maxDependencies: 8,
+        maxOutputBytes: 200_000,
+        maxTimeoutMs: 60_000,
+        allowedImages: ['node:lts-slim'],
+        blockedPackages: [],
+        sessionTimeoutSeconds: 1_800,
+        maxSessions: 20
+      },
+      security: {
+        toolMaxConcurrency: 8,
+        toolMaxCallsPerWindow: 1000,
+        toolRateWindowMs: 60_000
+      },
+      auth: {
+        mode: 'none'
+      },
+      auditLogger: createTestAuditLogger()
+    });
+    const client = new Client({ name: 'test-client', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    openedServers.push(server);
+    openedClients.push(client);
+
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    const tools = await client.listTools();
+    const toolNames = tools.tools.map((tool) => tool.name);
+
+    expect(toolNames).toContain('system.health');
+    expect(toolNames).toContain('dynamic.tool.create');
+    expect(toolNames).toContain('dynamic.tool.update');
+    expect(toolNames).not.toContain('dev.echo');
+    expect(toolNames).not.toContain('time.now');
+    expect(toolNames).not.toContain('system.guard_metrics');
+    expect(toolNames).not.toContain('system.runtime_config');
+    expect(toolNames).not.toContain('sandbox.initialize');
+  });
 });
 
 function createTestAuditLogger(): AuditLogger {

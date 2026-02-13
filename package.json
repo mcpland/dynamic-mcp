@@ -12,6 +12,8 @@
   },
   "scripts": {
     "dev": "tsx src/index.ts",
+    "dev:mvp": "tsx src/index.ts --profile mvp",
+    "dev:enterprise": "tsx src/index.ts --profile enterprise",
     "dev:stdio": "tsx src/index.ts --transport stdio",
     "dev:http": "tsx src/index.ts --transport http",
     "build": "tsc -p tsconfig.json && chmod +x dist/index.js",

@@ -59,13 +59,19 @@ Set `MCP_PROFILE=enterprise` to enable additional platform/ops features:
 
 ```bash
 npm install
-npm run dev:stdio
+npm run dev:mvp
 ```
 
 HTTP mode:
 
 ```bash
 npm run dev:http
+```
+
+Enterprise profile:
+
+```bash
+npm run dev:enterprise
 ```
 
 Default endpoint: `http://127.0.0.1:8788/mcp`
@@ -153,6 +159,8 @@ silently overwriting newer updates.
 ## Scripts
 
 - `npm run dev`
+- `npm run dev:mvp`
+- `npm run dev:enterprise`
 - `npm run dev:stdio`
 - `npm run dev:http`
 - `npm run lint`
