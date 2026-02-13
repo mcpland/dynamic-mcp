@@ -2,6 +2,8 @@
 
 A production-oriented **dynamic MCP server** in Node.js, with secure Docker sandbox execution and runtime tool management.
 
+Default profile is `mvp` (`MCP_PROFILE=mvp`), focused on dynamic Node.js tool execution.
+
 ## Core capabilities
 
 - Dynamic tool control plane (`dynamic.tool.*`):
@@ -12,13 +14,18 @@ A production-oriented **dynamic MCP server** in Node.js, with secure Docker sand
   - `dynamic.tool.get`
   - `dynamic.tool.enable`
 - Dynamic tool runtime execution in isolated Docker containers.
+- Global execution guard (concurrency + rate limit).
+
+## Enterprise profile extras
+
+Set `MCP_PROFILE=enterprise` to enable additional platform/ops features:
+
 - Reusable sandbox sessions:
   - `sandbox.initialize`
   - `sandbox.exec`
   - `sandbox.run_js`
   - `sandbox.stop`
   - `sandbox.session.list`
-- Global execution guard (concurrency + rate limit).
 - Guard metrics resource/tool:
   - resource: `dynamic://metrics/guard`
   - tool: `system.guard_metrics`
@@ -77,6 +84,7 @@ See `.env.example`.
 
 Key vars:
 
+- `MCP_PROFILE` (`mvp` or `enterprise`)
 - `MCP_TRANSPORT`
 - `MCP_HTTP_SESSION_TTL_SECONDS`
 - `MCP_HTTP_MAX_REQUEST_BYTES`

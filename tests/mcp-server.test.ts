@@ -22,6 +22,7 @@ describe('createMcpServer', () => {
   it('registers tools and executes dev.echo', async () => {
     const storeRoot = await mkdtemp(join(tmpdir(), 'dynamic-mcp-server-test-'));
     const server = await createMcpServer({
+      profile: 'enterprise',
       dynamic: {
         backend: 'file',
         storeFilePath: join(storeRoot, 'tools.json'),

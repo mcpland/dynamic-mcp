@@ -21,6 +21,7 @@ async function main(): Promise<void> {
 
   if (config.transport === 'stdio') {
     const server = await createMcpServer({
+      profile: config.profile,
       dynamic: config.dynamic,
       sandbox: config.sandbox,
       security: config.security,
@@ -36,6 +37,7 @@ async function main(): Promise<void> {
   }
 
   const serverHandle = await startHttpTransport(config.http, {
+    profile: config.profile,
     dynamic: config.dynamic,
     sandbox: config.sandbox,
     security: config.security,

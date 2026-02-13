@@ -159,6 +159,7 @@ describe('dynamic tool service', () => {
 
 function buildServerConfig(storeRoot: string) {
   return {
+    profile: 'mvp' as const,
     dynamic: {
       backend: 'file',
       storeFilePath: join(storeRoot, 'tools.json'),

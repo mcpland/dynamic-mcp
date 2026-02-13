@@ -2,8 +2,10 @@ import { resolve } from 'node:path';
 import { config as loadDotEnv } from 'dotenv';
 
 export type TransportMode = 'stdio' | 'http';
+export type FeatureProfile = 'mvp' | 'enterprise';
 
 export interface RuntimeConfig {
+  profile: FeatureProfile;
   transport: TransportMode;
   http: {
     host: string;
@@ -66,6 +68,7 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
   loadDotEnv({ quiet: true });
 
   const args = parseArgs(argv);
+  const profile = parseFeatureProfile(args.profile ?? env.MCP_PROFILE ?? 'mvp');
   const transport = parseTransportMode(args.transport ?? env.MCP_TRANSPORT ?? 'stdio');
   const host = args.host ?? env.MCP_HOST ?? '127.0.0.1';
   const portValue = args.port ?? env.MCP_PORT ?? env.PORT ?? '8788';
@@ -105,6 +108,7 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
   );
 
   return {
+    profile,
     transport,
     http: {
       host,
@@ -185,7 +189,9 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
     },
     auth: loadAuthConfig(args, env),
     audit: {
-      enabled: parseBoolean(args['audit-enabled'] ?? env.MCP_AUDIT_ENABLED ?? 'true'),
+      enabled: parseBoolean(
+        args['audit-enabled'] ?? env.MCP_AUDIT_ENABLED ?? (profile === 'enterprise' ? 'true' : 'false')
+      ),
       filePath: resolve(args['audit-file'] ?? env.MCP_AUDIT_FILE ?? '.dynamic-mcp/audit.log'),
       maxEventBytes: parsePositiveInteger(
         args['audit-max-event-bytes'] ?? env.MCP_AUDIT_MAX_EVENT_BYTES ?? '20000',
@@ -204,6 +210,15 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
       )
     }
   };
+}
+
+function parseFeatureProfile(value: string): FeatureProfile {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'mvp' || normalized === 'enterprise') {
+    return normalized;
+  }
+
+  throw new Error(`Invalid MCP profile "${value}". Expected "mvp" or "enterprise".`);
 }
 
 function parseArgs(argv: string[]): ArgMap {

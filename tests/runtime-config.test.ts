@@ -6,6 +6,7 @@ describe('loadRuntimeConfig', () => {
   it('uses defaults when no args are provided', () => {
     const config = loadRuntimeConfig([], {});
 
+    expect(config.profile).toBe('mvp');
     expect(config.transport).toBe('stdio');
     expect(config.http.host).toBe('127.0.0.1');
     expect(config.http.port).toBe(8788);
@@ -23,7 +24,7 @@ describe('loadRuntimeConfig', () => {
     expect(config.security.toolMaxConcurrency).toBe(8);
     expect(config.security.toolRateWindowMs).toBe(60000);
     expect(config.auth.mode).toBe('none');
-    expect(config.audit.enabled).toBe(true);
+    expect(config.audit.enabled).toBe(false);
     expect(config.audit.filePath.endsWith('.dynamic-mcp/audit.log')).toBe(true);
     expect(config.audit.maxFileBytes).toBe(10_000_000);
     expect(config.audit.maxFiles).toBe(5);
@@ -32,6 +33,8 @@ describe('loadRuntimeConfig', () => {
   it('reads CLI flags and normalizes path', () => {
     const config = loadRuntimeConfig(
       [
+        '--profile',
+        'enterprise',
         '--transport',
         'http',
         '--path',
@@ -51,6 +54,7 @@ describe('loadRuntimeConfig', () => {
     );
 
     expect(config.transport).toBe('http');
+    expect(config.profile).toBe('enterprise');
     expect(config.http.path).toBe('/gateway');
     expect(config.http.sessionTtlSeconds).toBe(90);
     expect(config.http.maxRequestBytes).toBe(2048);
@@ -59,6 +63,7 @@ describe('loadRuntimeConfig', () => {
     expect(config.dynamic.readOnly).toBe(false);
     expect(config.dynamic.adminToken).toBe('secret-token');
     expect(config.sandbox.allowedImages).toEqual(['node:lts-slim', 'node:22-alpine']);
+    expect(config.audit.enabled).toBe(true);
   });
 
   it('rejects invalid transport', () => {

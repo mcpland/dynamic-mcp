@@ -31,6 +31,7 @@ export interface HttpServerHandle {
 }
 
 interface HttpServerOptions {
+  profile: 'mvp' | 'enterprise';
   dynamic: {
     backend: 'file' | 'postgres';
     storeFilePath: string;
@@ -176,6 +177,7 @@ export async function startHttpTransport(
 
   const createSessionTransport = async (): Promise<StreamableHTTPServerTransport> => {
     const server = await createMcpServer({
+      profile: options.profile,
       dynamic: options.dynamic,
       sandbox: options.sandbox,
       security: options.security,

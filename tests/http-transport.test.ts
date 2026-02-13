@@ -32,6 +32,7 @@ describe('http transport health probes', () => {
         maxRequestBytes: 1_000_000
       },
       {
+        profile: 'mvp',
         dynamic: {
           backend: 'file',
           storeFilePath: join(root, 'tools.json'),
@@ -93,6 +94,7 @@ describe('http transport health probes', () => {
         maxRequestBytes: 1_000_000
       },
       {
+        profile: 'mvp',
         dynamic: {
           backend: 'postgres',
           storeFilePath: join(root, 'tools.json'),
@@ -143,6 +145,7 @@ describe('http transport health probes', () => {
         maxRequestBytes: 1_000_000
       },
       {
+        profile: 'mvp',
         dynamic: {
           backend: 'file',
           storeFilePath: join(root, 'tools.json'),
@@ -197,6 +200,7 @@ describe('http transport health probes', () => {
         maxRequestBytes: 64
       },
       {
+        profile: 'mvp',
         dynamic: {
           backend: 'file',
           storeFilePath: join(root, 'tools.json'),
