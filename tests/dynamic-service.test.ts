@@ -157,6 +157,248 @@ describe('dynamic tool service', () => {
     expect(createResult.isError).toBe(true);
     expect(createResult.content[0]?.type).toBe('text');
   });
+
+  it('deletes a dynamic tool and unregisters it', async () => {
+    const storeRoot = await mkdtemp(join(tmpdir(), 'dynamic-mcp-service-delete-'));
+    const server = await createMcpServer({
+      ...buildServerConfig(storeRoot)
+    });
+    const client = new Client({ name: 'test-client', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    openedServers.push(server);
+    openedClients.push(client);
+
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    await client.callTool({
+      name: 'dynamic.tool.create',
+      arguments: {
+        tool: {
+          name: 'dynamic.deleteme',
+          description: 'will be deleted',
+          code: 'return 1;'
+        }
+      }
+    });
+
+    let tools = await client.listTools();
+    expect(tools.tools.some((t) => t.name === 'dynamic.deleteme')).toBe(true);
+
+    const deleteResult = await client.callTool({
+      name: 'dynamic.tool.delete',
+      arguments: {
+        name: 'dynamic.deleteme'
+      }
+    });
+
+    expect(deleteResult.isError).not.toBe(true);
+
+    tools = await client.listTools();
+    expect(tools.tools.some((t) => t.name === 'dynamic.deleteme')).toBe(false);
+  });
+
+  it('enables and disables a dynamic tool', async () => {
+    const storeRoot = await mkdtemp(join(tmpdir(), 'dynamic-mcp-service-enable-'));
+    const server = await createMcpServer({
+      ...buildServerConfig(storeRoot)
+    });
+    const client = new Client({ name: 'test-client', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    openedServers.push(server);
+    openedClients.push(client);
+
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    await client.callTool({
+      name: 'dynamic.tool.create',
+      arguments: {
+        tool: {
+          name: 'dynamic.toggletool',
+          description: 'toggle test',
+          code: 'return 1;'
+        }
+      }
+    });
+
+    // Disable the tool
+    const disableResult = await client.callTool({
+      name: 'dynamic.tool.enable',
+      arguments: {
+        name: 'dynamic.toggletool',
+        enabled: false
+      }
+    });
+    expect(disableResult.isError).not.toBe(true);
+
+    // Disabled tool should be unregistered from runtime tools
+    let tools = await client.listTools();
+    expect(tools.tools.some((t) => t.name === 'dynamic.toggletool')).toBe(false);
+
+    // Re-enable the tool
+    const enableResult = await client.callTool({
+      name: 'dynamic.tool.enable',
+      arguments: {
+        name: 'dynamic.toggletool',
+        enabled: true
+      }
+    });
+    expect(enableResult.isError).not.toBe(true);
+
+    tools = await client.listTools();
+    expect(tools.tools.some((t) => t.name === 'dynamic.toggletool')).toBe(true);
+  });
+
+  it('rejects reserved tool name prefix dynamic.tool.*', async () => {
+    const storeRoot = await mkdtemp(join(tmpdir(), 'dynamic-mcp-service-reserved-'));
+    const server = await createMcpServer({
+      ...buildServerConfig(storeRoot)
+    });
+    const client = new Client({ name: 'test-client', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    openedServers.push(server);
+    openedClients.push(client);
+
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    const result = await client.callTool({
+      name: 'dynamic.tool.create',
+      arguments: {
+        tool: {
+          name: 'dynamic.tool.evil',
+          description: 'reserved',
+          code: 'return 1;'
+        }
+      }
+    });
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toMatch(/reserved/i);
+  });
+
+  it('rejects reserved built-in tool name run_js_ephemeral', async () => {
+    const storeRoot = await mkdtemp(join(tmpdir(), 'dynamic-mcp-service-reserved-builtin-'));
+    const server = await createMcpServer({
+      ...buildServerConfig(storeRoot)
+    });
+    const client = new Client({ name: 'test-client', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    openedServers.push(server);
+    openedClients.push(client);
+
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    const result = await client.callTool({
+      name: 'dynamic.tool.create',
+      arguments: {
+        tool: {
+          name: 'run_js_ephemeral',
+          description: 'reserved',
+          code: 'return 1;'
+        }
+      }
+    });
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toMatch(/reserved/i);
+  });
+
+  it('lists dynamic tools with and without code', async () => {
+    const storeRoot = await mkdtemp(join(tmpdir(), 'dynamic-mcp-service-list-'));
+    const server = await createMcpServer({
+      ...buildServerConfig(storeRoot)
+    });
+    const client = new Client({ name: 'test-client', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    openedServers.push(server);
+    openedClients.push(client);
+
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    await client.callTool({
+      name: 'dynamic.tool.create',
+      arguments: {
+        tool: {
+          name: 'dynamic.listed',
+          description: 'List test',
+          code: 'console.log("hello");'
+        }
+      }
+    });
+
+    // List without code
+    const listResult = await client.callTool({
+      name: 'dynamic.tool.list',
+      arguments: { includeCode: false }
+    });
+    expect(listResult.isError).not.toBe(true);
+    const toolsWithoutCode = listResult.structuredContent as {
+      tools: Array<{ name: string; code?: string; codeSizeBytes: number }>;
+    };
+    const found = toolsWithoutCode.tools.find((t) => t.name === 'dynamic.listed');
+    expect(found).toBeDefined();
+    expect(found?.code).toBeUndefined();
+    expect(found?.codeSizeBytes).toBeGreaterThan(0);
+
+    // List with code
+    const listWithCode = await client.callTool({
+      name: 'dynamic.tool.list',
+      arguments: { includeCode: true }
+    });
+    const toolsWithCode = listWithCode.structuredContent as {
+      tools: Array<{ name: string; code?: string }>;
+    };
+    const foundWithCode = toolsWithCode.tools.find((t) => t.name === 'dynamic.listed');
+    expect(foundWithCode?.code).toBe('console.log("hello");');
+  });
+
+  it('get returns error for non-existent tool', async () => {
+    const storeRoot = await mkdtemp(join(tmpdir(), 'dynamic-mcp-service-get-missing-'));
+    const server = await createMcpServer({
+      ...buildServerConfig(storeRoot)
+    });
+    const client = new Client({ name: 'test-client', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    openedServers.push(server);
+    openedClients.push(client);
+
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    const result = await client.callTool({
+      name: 'dynamic.tool.get',
+      arguments: { name: 'nonexistent.tool' }
+    });
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toMatch(/not found/i);
+  });
+
+  it('delete returns error for non-existent tool', async () => {
+    const storeRoot = await mkdtemp(join(tmpdir(), 'dynamic-mcp-service-delete-missing-'));
+    const server = await createMcpServer({
+      ...buildServerConfig(storeRoot)
+    });
+    const client = new Client({ name: 'test-client', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    openedServers.push(server);
+    openedClients.push(client);
+
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    const result = await client.callTool({
+      name: 'dynamic.tool.delete',
+      arguments: { name: 'nonexistent.tool' }
+    });
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toMatch(/not found/i);
+  });
 });
 
 function buildServerConfig(storeRoot: string) {
