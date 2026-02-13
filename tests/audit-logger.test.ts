@@ -107,4 +107,59 @@ describe('AuditLogger', () => {
       .filter((line) => line.length > 0);
     expect(lines.length).toBe(2);
   });
+
+  it('redacts sensitive keys in audit details', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dynamic-mcp-audit-redact-'));
+    const filePath = join(root, 'audit.log');
+
+    const logger = new AuditLogger({
+      enabled: true,
+      filePath,
+      maxEventBytes: 10_000,
+      maxFileBytes: 10_000,
+      maxFiles: 2,
+      service: 'dynamic-mcp-test',
+      serviceVersion: 'test'
+    });
+
+    await logger.log({
+      action: 'http.auth',
+      actor: 'tester',
+      result: 'denied',
+      details: {
+        token: 'abc',
+        nested: {
+          api_key: 'xyz',
+          normal: 'ok'
+        },
+        list: [
+          {
+            password: '123'
+          }
+        ],
+        reason: 'missing bearer'
+      }
+    });
+
+    const content = await readFile(filePath, 'utf8');
+    const parsed = JSON.parse(content.trim()) as {
+      details?: {
+        token?: string;
+        nested?: {
+          api_key?: string;
+          normal?: string;
+        };
+        list?: Array<{
+          password?: string;
+        }>;
+        reason?: string;
+      };
+    };
+
+    expect(parsed.details?.token).toBe('[REDACTED]');
+    expect(parsed.details?.nested?.api_key).toBe('[REDACTED]');
+    expect(parsed.details?.nested?.normal).toBe('ok');
+    expect(parsed.details?.list?.[0]?.password).toBe('[REDACTED]');
+    expect(parsed.details?.reason).toBe('missing bearer');
+  });
 });

@@ -49,11 +49,12 @@ export class AuditLogger {
         // Keep the chain alive after failed writes.
       })
       .then(async () => {
+        const sanitizedEvent = sanitizeAuditEvent(event);
         const payload = {
           timestamp: new Date().toISOString(),
           service: this.service,
           serviceVersion: this.serviceVersion,
-          ...event
+          ...sanitizedEvent
         };
 
         let line = JSON.stringify(payload);
@@ -125,3 +126,55 @@ async function renameIfExists(fromPath: string, toPath: string): Promise<void> {
 async function removeIfExists(path: string): Promise<void> {
   await rm(path, { force: true });
 }
+
+function sanitizeAuditEvent(event: AuditEvent): AuditEvent {
+  if (!event.details) {
+    return event;
+  }
+
+  return {
+    ...event,
+    details: sanitizeDetailsObject(event.details, 0)
+  };
+}
+
+function sanitizeDetailsObject(
+  input: Record<string, unknown>,
+  depth: number
+): Record<string, unknown> {
+  const output: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(input)) {
+    if (sensitiveDetailKeyPattern.test(key)) {
+      output[key] = '[REDACTED]';
+      continue;
+    }
+
+    output[key] = sanitizeDetailsValue(value, depth + 1);
+  }
+
+  return output;
+}
+
+function sanitizeDetailsValue(value: unknown, depth: number): unknown {
+  if (depth > 8) {
+    return '[TRUNCATED_DEPTH]';
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeDetailsValue(item, depth + 1));
+  }
+
+  if (typeof value === 'object') {
+    return sanitizeDetailsObject(value as Record<string, unknown>, depth + 1);
+  }
+
+  return value;
+}
+
+const sensitiveDetailKeyPattern =
+  /(?:token|password|secret|authorization|cookie|api[-_]?key|bearer|credential)/i;
