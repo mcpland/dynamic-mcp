@@ -28,6 +28,7 @@ interface HttpServerOptions {
     backend: 'file' | 'postgres';
     storeFilePath: string;
     maxTools: number;
+    readOnly: boolean;
     adminToken?: string;
     postgres?: {
       connectionString: string;

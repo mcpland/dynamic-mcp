@@ -13,6 +13,7 @@ describe('loadRuntimeConfig', () => {
     expect(config.dynamic.backend).toBe('file');
     expect(config.dynamic.storeFilePath.endsWith('.dynamic-mcp/tools.json')).toBe(true);
     expect(config.dynamic.maxTools).toBe(256);
+    expect(config.dynamic.readOnly).toBe(false);
     expect(config.sandbox.memoryLimit).toBe('512m');
     expect(config.sandbox.allowedImages).toEqual(['node:lts-slim']);
     expect(config.sandbox.sessionTimeoutSeconds).toBe(1800);
@@ -47,6 +48,7 @@ describe('loadRuntimeConfig', () => {
     expect(config.http.path).toBe('/gateway');
     expect(config.dynamic.backend).toBe('file');
     expect(config.dynamic.maxTools).toBe(12);
+    expect(config.dynamic.readOnly).toBe(false);
     expect(config.dynamic.adminToken).toBe('secret-token');
     expect(config.sandbox.allowedImages).toEqual(['node:lts-slim', 'node:22-alpine']);
   });
@@ -118,6 +120,11 @@ describe('loadRuntimeConfig', () => {
 
     expect(config.dynamic.postgres?.initMaxAttempts).toBe(4);
     expect(config.dynamic.postgres?.initBackoffMs).toBe(25);
+  });
+
+  it('loads dynamic read-only mode', () => {
+    const config = loadRuntimeConfig(['--dynamic-read-only', 'true'], {});
+    expect(config.dynamic.readOnly).toBe(true);
   });
 
   it('loads audit rotation config values', () => {

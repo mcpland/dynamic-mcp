@@ -14,6 +14,7 @@ export interface RuntimeConfig {
     backend: 'file' | 'postgres';
     storeFilePath: string;
     maxTools: number;
+    readOnly: boolean;
     adminToken?: string;
     postgres?: {
       connectionString: string;
@@ -74,6 +75,7 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
   const maxTools = parseDynamicToolLimit(
     args['dynamic-max-tools'] ?? env.MCP_DYNAMIC_MAX_TOOLS ?? '256'
   );
+  const readOnly = parseBoolean(args['dynamic-read-only'] ?? env.MCP_DYNAMIC_READ_ONLY ?? 'false');
   const adminToken = normalizeOptionalString(args['admin-token'] ?? env.MCP_ADMIN_TOKEN);
   const postgresConnectionString = normalizeOptionalString(
     args['dynamic-pg-url'] ?? env.MCP_DYNAMIC_PG_URL
@@ -111,6 +113,7 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
       backend: dynamicBackend,
       storeFilePath,
       maxTools,
+      readOnly,
       adminToken,
       postgresConnectionString,
       postgresSchema,
@@ -346,6 +349,7 @@ function loadDynamicConfig(params: {
   backend: RuntimeConfig['dynamic']['backend'];
   storeFilePath: string;
   maxTools: number;
+  readOnly: boolean;
   adminToken?: string;
   postgresConnectionString?: string;
   postgresSchema: string;
@@ -356,6 +360,7 @@ function loadDynamicConfig(params: {
     backend: params.backend,
     storeFilePath: params.storeFilePath,
     maxTools: params.maxTools,
+    readOnly: params.readOnly,
     ...(params.adminToken ? { adminToken: params.adminToken } : {})
   } satisfies Omit<RuntimeConfig['dynamic'], 'postgres'>;
 

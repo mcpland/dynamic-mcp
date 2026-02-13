@@ -65,6 +65,7 @@ export interface DynamicToolServiceOptions {
   executionGuard: ToolExecutionGuard;
   auditLogger?: AuditLogger;
   adminToken?: string;
+  readOnly: boolean;
 }
 
 export class DynamicToolService {
@@ -74,6 +75,7 @@ export class DynamicToolService {
   private readonly executionGuard: ToolExecutionGuard;
   private readonly auditLogger?: AuditLogger;
   private readonly adminToken?: string;
+  private readonly readOnly: boolean;
   private readonly runtimeToolHandles = new Map<string, RegisteredTool>();
 
   constructor(options: DynamicToolServiceOptions) {
@@ -83,6 +85,7 @@ export class DynamicToolService {
     this.executionGuard = options.executionGuard;
     this.auditLogger = options.auditLogger;
     this.adminToken = options.adminToken;
+    this.readOnly = options.readOnly;
   }
 
   async initialize(): Promise<void> {
@@ -165,6 +168,7 @@ export class DynamicToolService {
           try {
             this.assertAdmin(adminToken);
             this.assertNameAllowed(tool.name);
+            this.assertWritesAllowed('create');
 
             const created = await this.registry.create(tool);
             await this.applyRuntimeTool(created);
@@ -202,6 +206,7 @@ export class DynamicToolService {
           try {
             this.assertAdmin(adminToken);
             this.assertNameAllowed(name);
+            this.assertWritesAllowed('update');
 
             const updated = await this.registry.update(name, patch, expectedRevision);
             await this.applyRuntimeTool(updated);
@@ -239,6 +244,7 @@ export class DynamicToolService {
           try {
             this.assertAdmin(adminToken);
             this.assertNameAllowed(name);
+            this.assertWritesAllowed('delete');
 
             const removed = await this.registry.remove(name, expectedRevision);
             this.removeRuntimeTool(name);
@@ -280,6 +286,7 @@ export class DynamicToolService {
           try {
             this.assertAdmin(adminToken);
             this.assertNameAllowed(name);
+            this.assertWritesAllowed('enable/disable');
 
             const updated = await this.registry.setEnabled(name, enabled, expectedRevision);
             await this.applyRuntimeTool(updated);
@@ -357,6 +364,14 @@ export class DynamicToolService {
   private assertNameAllowed(name: string): void {
     if (name.startsWith('dynamic.tool.')) {
       throw new Error(`Reserved tool name prefix is not allowed: ${name}`);
+    }
+  }
+
+  private assertWritesAllowed(operation: string): void {
+    if (this.readOnly) {
+      throw new Error(
+        `Dynamic registry is read-only; cannot ${operation} tools while MCP_DYNAMIC_READ_ONLY is enabled.`
+      );
     }
   }
 

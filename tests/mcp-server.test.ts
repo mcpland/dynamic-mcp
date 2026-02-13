@@ -25,7 +25,8 @@ describe('createMcpServer', () => {
       dynamic: {
         backend: 'file',
         storeFilePath: join(storeRoot, 'tools.json'),
-        maxTools: 32
+        maxTools: 32,
+        readOnly: false
       },
       sandbox: {
         dockerBinary: 'docker',
@@ -91,6 +92,7 @@ describe('createMcpServer', () => {
     expect(runtimeConfig.structuredContent).toMatchObject({
       dynamic: {
         backend: 'file',
+        readOnly: false,
         adminTokenConfigured: false
       },
       auth: {

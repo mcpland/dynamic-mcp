@@ -46,6 +46,7 @@ const RuntimeConfigOutputSchema = z.object({
   dynamic: z.object({
     backend: z.enum(['file', 'postgres']),
     maxTools: z.number().int().positive(),
+    readOnly: z.boolean(),
     adminTokenConfigured: z.boolean(),
     postgresSchema: z.string().optional(),
     postgresInitMaxAttempts: z.number().int().positive().optional(),
@@ -82,6 +83,7 @@ export interface CreateMcpServerOptions {
     backend: 'file' | 'postgres';
     storeFilePath: string;
     maxTools: number;
+    readOnly: boolean;
     adminToken?: string;
     postgres?: {
       connectionString: string;
@@ -318,6 +320,7 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
     registry,
     executionEngine,
     adminToken: options.dynamic.adminToken,
+    readOnly: options.dynamic.readOnly,
     executionGuard,
     auditLogger: options.auditLogger
   });
@@ -462,6 +465,7 @@ function buildRuntimeConfigSnapshot(
     dynamic: {
       backend: options.dynamic.backend,
       maxTools: options.dynamic.maxTools,
+      readOnly: options.dynamic.readOnly,
       adminTokenConfigured: Boolean(options.dynamic.adminToken),
       ...(options.dynamic.backend === 'postgres' && options.dynamic.postgres
         ? {

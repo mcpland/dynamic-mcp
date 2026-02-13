@@ -33,7 +33,8 @@ describe('http transport health probes', () => {
         dynamic: {
           backend: 'file',
           storeFilePath: join(root, 'tools.json'),
-          maxTools: 16
+          maxTools: 16,
+          readOnly: false
         },
         sandbox: {
           dockerBinary: 'docker',
@@ -88,7 +89,8 @@ describe('http transport health probes', () => {
         dynamic: {
           backend: 'postgres',
           storeFilePath: join(root, 'tools.json'),
-          maxTools: 16
+          maxTools: 16,
+          readOnly: false
         },
         sandbox: {
           dockerBinary: 'docker',
@@ -135,7 +137,8 @@ describe('http transport health probes', () => {
         dynamic: {
           backend: 'file',
           storeFilePath: join(root, 'tools.json'),
-          maxTools: 16
+          maxTools: 16,
+          readOnly: false
         },
         sandbox: {
           dockerBinary: 'docker',

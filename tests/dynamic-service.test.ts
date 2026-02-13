@@ -95,6 +95,7 @@ describe('dynamic tool service', () => {
         backend: 'file',
         storeFilePath: join(storeRoot, 'tools.json'),
         maxTools: 10,
+        readOnly: false,
         adminToken: 'top-secret'
       }
     });
@@ -120,6 +121,40 @@ describe('dynamic tool service', () => {
     });
     expect(authorized.isError).not.toBe(true);
   });
+
+  it('blocks dynamic write operations when registry is read-only', async () => {
+    const storeRoot = await mkdtemp(join(tmpdir(), 'dynamic-mcp-service-readonly-test-'));
+    const server = await createMcpServer({
+      ...buildServerConfig(storeRoot),
+      dynamic: {
+        backend: 'file',
+        storeFilePath: join(storeRoot, 'tools.json'),
+        maxTools: 10,
+        readOnly: true
+      }
+    });
+    const client = new Client({ name: 'test-client', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    openedServers.push(server);
+    openedClients.push(client);
+
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    const createResult = await client.callTool({
+      name: 'dynamic.tool.create',
+      arguments: {
+        tool: {
+          name: 'dynamic.readonly',
+          description: 'should be blocked',
+          code: 'return 1;'
+        }
+      }
+    });
+
+    expect(createResult.isError).toBe(true);
+    expect(createResult.content[0]?.type).toBe('text');
+  });
 });
 
 function buildServerConfig(storeRoot: string) {
@@ -127,7 +162,8 @@ function buildServerConfig(storeRoot: string) {
     dynamic: {
       backend: 'file',
       storeFilePath: join(storeRoot, 'tools.json'),
-      maxTools: 10
+      maxTools: 10,
+      readOnly: false
     },
     sandbox: {
       dockerBinary: 'docker',
