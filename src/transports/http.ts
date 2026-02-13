@@ -151,8 +151,9 @@ export async function startHttpTransport(
   };
 
   const postHandler = async (req: Request, res: Response): Promise<void> => {
+    const requestId = resolveRequestId(req, res);
     if (
-      !(await authenticate(req, res, jwtVerifier, options.auditLogger, {
+      !(await authenticate(req, res, jwtVerifier, options.auditLogger, requestId, {
         onSuccess: () => {
           authSuccessTotal += 1;
         },
@@ -170,7 +171,7 @@ export async function startHttpTransport(
       if (typeof sessionId === 'string') {
         const existing = sessions.get(sessionId);
         if (!existing) {
-          sendJsonRpcError(res, 404, -32001, `Unknown MCP session id: ${sessionId}`);
+          sendJsonRpcError(res, 404, -32001, `Unknown MCP session id: ${sessionId}`, undefined, requestId);
           return;
         }
 
@@ -179,20 +180,28 @@ export async function startHttpTransport(
       }
 
       if (!isInitializeRequest(req.body)) {
-        sendJsonRpcError(res, 400, -32000, 'Missing mcp-session-id or initialize request body.');
+        sendJsonRpcError(
+          res,
+          400,
+          -32000,
+          'Missing mcp-session-id or initialize request body.',
+          undefined,
+          requestId
+        );
         return;
       }
 
       const transport = await createSessionTransport();
       await transport.handleRequest(req, res, req.body);
     } catch (error) {
-      sendJsonRpcError(res, 500, -32603, 'Internal MCP server error.', error);
+      sendJsonRpcError(res, 500, -32603, 'Internal MCP server error.', error, requestId);
     }
   };
 
   const getHandler = async (req: Request, res: Response): Promise<void> => {
+    const requestId = resolveRequestId(req, res);
     if (
-      !(await authenticate(req, res, jwtVerifier, options.auditLogger, {
+      !(await authenticate(req, res, jwtVerifier, options.auditLogger, requestId, {
         onSuccess: () => {
           authSuccessTotal += 1;
         },
@@ -206,26 +215,27 @@ export async function startHttpTransport(
 
     const sessionId = req.headers['mcp-session-id'];
     if (typeof sessionId !== 'string') {
-      sendJsonRpcError(res, 400, -32000, 'Missing mcp-session-id header.');
+      sendJsonRpcError(res, 400, -32000, 'Missing mcp-session-id header.', undefined, requestId);
       return;
     }
 
     const existing = sessions.get(sessionId);
     if (!existing) {
-      sendJsonRpcError(res, 404, -32001, `Unknown MCP session id: ${sessionId}`);
+      sendJsonRpcError(res, 404, -32001, `Unknown MCP session id: ${sessionId}`, undefined, requestId);
       return;
     }
 
     try {
       await existing.transport.handleRequest(req, res, req.body);
     } catch (error) {
-      sendJsonRpcError(res, 500, -32603, 'Failed to process SSE request.', error);
+      sendJsonRpcError(res, 500, -32603, 'Failed to process SSE request.', error, requestId);
     }
   };
 
   const deleteHandler = async (req: Request, res: Response): Promise<void> => {
+    const requestId = resolveRequestId(req, res);
     if (
-      !(await authenticate(req, res, jwtVerifier, options.auditLogger, {
+      !(await authenticate(req, res, jwtVerifier, options.auditLogger, requestId, {
         onSuccess: () => {
           authSuccessTotal += 1;
         },
@@ -239,32 +249,34 @@ export async function startHttpTransport(
 
     const sessionId = req.headers['mcp-session-id'];
     if (typeof sessionId !== 'string') {
-      sendJsonRpcError(res, 400, -32000, 'Missing mcp-session-id header.');
+      sendJsonRpcError(res, 400, -32000, 'Missing mcp-session-id header.', undefined, requestId);
       return;
     }
 
     const existing = sessions.get(sessionId);
     if (!existing) {
-      sendJsonRpcError(res, 404, -32001, `Unknown MCP session id: ${sessionId}`);
+      sendJsonRpcError(res, 404, -32001, `Unknown MCP session id: ${sessionId}`, undefined, requestId);
       return;
     }
 
     try {
       await existing.transport.handleRequest(req, res, req.body);
     } catch (error) {
-      sendJsonRpcError(res, 500, -32603, 'Failed to close MCP session.', error);
+      sendJsonRpcError(res, 500, -32603, 'Failed to close MCP session.', error, requestId);
     }
   };
 
   app.post(config.path, postHandler);
   app.get(config.path, getHandler);
   app.delete(config.path, deleteHandler);
-  app.get('/livez', (_req, res) => {
+  app.get('/livez', (req, res) => {
+    resolveRequestId(req, res);
     res.status(200).json({
       status: 'ok'
     });
   });
-  app.get('/readyz', async (_req, res) => {
+  app.get('/readyz', async (req, res) => {
+    resolveRequestId(req, res);
     try {
       await readinessCheck();
       res.status(200).json({
@@ -277,7 +289,8 @@ export async function startHttpTransport(
       });
     }
   });
-  app.get('/metrics', (_req, res) => {
+  app.get('/metrics', (req, res) => {
+    resolveRequestId(req, res);
     res.setHeader('Content-Type', 'text/plain; version=0.0.4');
     res.status(200).send(
       formatPrometheusMetrics({
@@ -309,6 +322,7 @@ async function authenticate(
   res: Response,
   verifier: JwtAuthVerifier | null,
   auditLogger: AuditLogger,
+  requestId: string,
   statsHooks: {
     onSuccess: () => void;
     onDenied: () => void;
@@ -320,12 +334,19 @@ async function authenticate(
 
   const authorization = req.headers.authorization;
   if (!authorization || !authorization.startsWith('Bearer ')) {
-    sendJsonRpcError(res, 401, -32001, 'Unauthorized: missing bearer token.');
+    sendJsonRpcError(
+      res,
+      401,
+      -32001,
+      'Unauthorized: missing bearer token.',
+      undefined,
+      requestId
+    );
     void auditLogger.log({
       action: 'http.auth',
       actor: req.ip,
       result: 'denied',
-      details: { reason: 'missing_bearer' }
+      details: { reason: 'missing_bearer', requestId }
     });
     statsHooks.onDenied();
     return false;
@@ -333,12 +354,19 @@ async function authenticate(
 
   const token = authorization.slice('Bearer '.length).trim();
   if (token.length === 0) {
-    sendJsonRpcError(res, 401, -32001, 'Unauthorized: empty bearer token.');
+    sendJsonRpcError(
+      res,
+      401,
+      -32001,
+      'Unauthorized: empty bearer token.',
+      undefined,
+      requestId
+    );
     void auditLogger.log({
       action: 'http.auth',
       actor: req.ip,
       result: 'denied',
-      details: { reason: 'empty_bearer' }
+      details: { reason: 'empty_bearer', requestId }
     });
     statsHooks.onDenied();
     return false;
@@ -351,7 +379,7 @@ async function authenticate(
       action: 'http.auth',
       actor: authInfo.clientId,
       result: 'success',
-      details: { scopes: authInfo.scopes }
+      details: { scopes: authInfo.scopes, requestId }
     });
     statsHooks.onSuccess();
     return true;
@@ -360,13 +388,15 @@ async function authenticate(
       res,
       403,
       -32002,
-      error instanceof Error ? `Forbidden: ${error.message}` : 'Forbidden: invalid token.'
+      error instanceof Error ? `Forbidden: ${error.message}` : 'Forbidden: invalid token.',
+      undefined,
+      requestId
     );
     void auditLogger.log({
       action: 'http.auth',
       actor: req.ip,
       result: 'denied',
-      details: { reason: error instanceof Error ? error.message : String(error) }
+      details: { reason: error instanceof Error ? error.message : String(error), requestId }
     });
     statsHooks.onDenied();
     return false;
@@ -378,21 +408,36 @@ function sendJsonRpcError(
   statusCode: number,
   code: number,
   message: string,
-  error?: unknown
+  error?: unknown,
+  requestId?: string
 ): void {
   if (error) {
-    console.error('[mcp-http] request failed:', error);
+    console.error('[mcp-http] request failed:', {
+      requestId: requestId ?? null,
+      error
+    });
   }
 
   if (res.headersSent) {
     return;
   }
 
+  if (requestId) {
+    res.setHeader('x-request-id', requestId);
+  }
+
   res.status(statusCode).json({
     jsonrpc: '2.0',
     error: {
       code,
-      message
+      message,
+      ...(requestId
+        ? {
+            data: {
+              requestId
+            }
+          }
+        : {})
     },
     id: null
   });
@@ -444,6 +489,14 @@ function formatPrometheusMetrics(values: {
     `dynamic_mcp_http_auth_denied_total ${values.authDeniedTotal}`,
     ''
   ].join('\n');
+}
+
+function resolveRequestId(req: Request, res: Response): string {
+  const provided = req.header('x-request-id')?.trim();
+  const requestId =
+    provided && provided.length > 0 && provided.length <= 128 ? provided : randomUUID();
+  res.setHeader('x-request-id', requestId);
+  return requestId;
 }
 
 function createReadinessCheck(dynamic: HttpServerOptions['dynamic']): () => Promise<void> {

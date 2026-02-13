@@ -60,12 +60,18 @@ describe('http transport health probes', () => {
     );
     openHandles.push(handle);
 
-    const live = await fetch(`http://127.0.0.1:${port}/livez`);
+    const live = await fetch(`http://127.0.0.1:${port}/livez`, {
+      headers: {
+        'x-request-id': 'req-live-1'
+      }
+    });
     expect(live.status).toBe(200);
+    expect(live.headers.get('x-request-id')).toBe('req-live-1');
     await expect(live.json()).resolves.toMatchObject({ status: 'ok' });
 
     const ready = await fetch(`http://127.0.0.1:${port}/readyz`);
     expect(ready.status).toBe(200);
+    expect(ready.headers.get('x-request-id')).toBeTruthy();
     await expect(ready.json()).resolves.toMatchObject({ status: 'ready' });
   });
 
