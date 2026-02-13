@@ -60,6 +60,7 @@ Health probes:
 
 - `GET /livez` -> process liveness
 - `GET /readyz` -> backend readiness (checks dynamic registry backend dependencies)
+- `GET /metrics` -> Prometheus-style runtime metrics
 
 ## Environment variables
 

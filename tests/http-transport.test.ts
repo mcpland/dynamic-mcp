@@ -115,6 +115,56 @@ describe('http transport health probes', () => {
       status: 'not_ready'
     });
   });
+
+  it('exposes prometheus metrics endpoint', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dynamic-mcp-http-metrics-'));
+    const port = await getFreePort();
+    const handle = await startHttpTransport(
+      {
+        host: '127.0.0.1',
+        port,
+        path: '/mcp'
+      },
+      {
+        dynamic: {
+          backend: 'file',
+          storeFilePath: join(root, 'tools.json'),
+          maxTools: 16
+        },
+        sandbox: {
+          dockerBinary: 'docker',
+          memoryLimit: '512m',
+          cpuLimit: '1',
+          maxDependencies: 8,
+          maxOutputBytes: 200_000,
+          maxTimeoutMs: 60_000,
+          allowedImages: ['node:lts-slim'],
+          blockedPackages: [],
+          sessionTimeoutSeconds: 1_800,
+          maxSessions: 20
+        },
+        security: {
+          toolMaxConcurrency: 8,
+          toolMaxCallsPerWindow: 1000,
+          toolRateWindowMs: 60_000
+        },
+        auth: {
+          mode: 'none'
+        },
+        auditLogger: createTestAuditLogger()
+      }
+    );
+    openHandles.push(handle);
+
+    const metrics = await fetch(`http://127.0.0.1:${port}/metrics`);
+    expect(metrics.status).toBe(200);
+    const text = await metrics.text();
+    expect(text).toContain('dynamic_mcp_process_uptime_seconds');
+    expect(text).toContain('dynamic_mcp_http_sessions_active');
+    expect(text).toContain('dynamic_mcp_http_sessions_created_total');
+    expect(text).toContain('dynamic_mcp_http_auth_success_total');
+    expect(text).toContain('dynamic_mcp_http_auth_denied_total');
+  });
 });
 
 function createTestAuditLogger(): AuditLogger {

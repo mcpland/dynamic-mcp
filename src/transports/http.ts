@@ -74,8 +74,12 @@ export async function startHttpTransport(
   config: HttpTransportConfig,
   options: HttpServerOptions
 ): Promise<HttpServerHandle> {
+  const startedAt = Date.now();
   const app = createMcpExpressApp({ host: config.host });
   const readinessCheck = createReadinessCheck(options.dynamic);
+  let sessionsCreatedTotal = 0;
+  let authSuccessTotal = 0;
+  let authDeniedTotal = 0;
   const jwtVerifier =
     options.auth.mode === 'jwt' && options.auth.jwt
       ? new JwtAuthVerifier({
@@ -127,6 +131,7 @@ export async function startHttpTransport(
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (sessionId) => {
+        sessionsCreatedTotal += 1;
         sessions.set(sessionId, { server, transport });
       },
       onsessionclosed: async (sessionId) => {
@@ -146,7 +151,16 @@ export async function startHttpTransport(
   };
 
   const postHandler = async (req: Request, res: Response): Promise<void> => {
-    if (!(await authenticate(req, res, jwtVerifier, options.auditLogger))) {
+    if (
+      !(await authenticate(req, res, jwtVerifier, options.auditLogger, {
+        onSuccess: () => {
+          authSuccessTotal += 1;
+        },
+        onDenied: () => {
+          authDeniedTotal += 1;
+        }
+      }))
+    ) {
       return;
     }
 
@@ -177,7 +191,16 @@ export async function startHttpTransport(
   };
 
   const getHandler = async (req: Request, res: Response): Promise<void> => {
-    if (!(await authenticate(req, res, jwtVerifier, options.auditLogger))) {
+    if (
+      !(await authenticate(req, res, jwtVerifier, options.auditLogger, {
+        onSuccess: () => {
+          authSuccessTotal += 1;
+        },
+        onDenied: () => {
+          authDeniedTotal += 1;
+        }
+      }))
+    ) {
       return;
     }
 
@@ -201,7 +224,16 @@ export async function startHttpTransport(
   };
 
   const deleteHandler = async (req: Request, res: Response): Promise<void> => {
-    if (!(await authenticate(req, res, jwtVerifier, options.auditLogger))) {
+    if (
+      !(await authenticate(req, res, jwtVerifier, options.auditLogger, {
+        onSuccess: () => {
+          authSuccessTotal += 1;
+        },
+        onDenied: () => {
+          authDeniedTotal += 1;
+        }
+      }))
+    ) {
       return;
     }
 
@@ -245,6 +277,18 @@ export async function startHttpTransport(
       });
     }
   });
+  app.get('/metrics', (_req, res) => {
+    res.setHeader('Content-Type', 'text/plain; version=0.0.4');
+    res.status(200).send(
+      formatPrometheusMetrics({
+        processUptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
+        sessionsActive: sessions.size,
+        sessionsCreatedTotal,
+        authSuccessTotal,
+        authDeniedTotal
+      })
+    );
+  });
 
   const httpServer = await listen(app, config.host, config.port);
 
@@ -264,7 +308,11 @@ async function authenticate(
   req: Request,
   res: Response,
   verifier: JwtAuthVerifier | null,
-  auditLogger: AuditLogger
+  auditLogger: AuditLogger,
+  statsHooks: {
+    onSuccess: () => void;
+    onDenied: () => void;
+  }
 ): Promise<boolean> {
   if (!verifier) {
     return true;
@@ -279,6 +327,7 @@ async function authenticate(
       result: 'denied',
       details: { reason: 'missing_bearer' }
     });
+    statsHooks.onDenied();
     return false;
   }
 
@@ -291,6 +340,7 @@ async function authenticate(
       result: 'denied',
       details: { reason: 'empty_bearer' }
     });
+    statsHooks.onDenied();
     return false;
   }
 
@@ -303,6 +353,7 @@ async function authenticate(
       result: 'success',
       details: { scopes: authInfo.scopes }
     });
+    statsHooks.onSuccess();
     return true;
   } catch (error) {
     sendJsonRpcError(
@@ -317,6 +368,7 @@ async function authenticate(
       result: 'denied',
       details: { reason: error instanceof Error ? error.message : String(error) }
     });
+    statsHooks.onDenied();
     return false;
   }
 }
@@ -370,6 +422,28 @@ function closeServer(server: HttpServer): Promise<void> {
       resolve();
     });
   });
+}
+
+function formatPrometheusMetrics(values: {
+  processUptimeSeconds: number;
+  sessionsActive: number;
+  sessionsCreatedTotal: number;
+  authSuccessTotal: number;
+  authDeniedTotal: number;
+}): string {
+  return [
+    '# TYPE dynamic_mcp_process_uptime_seconds gauge',
+    `dynamic_mcp_process_uptime_seconds ${values.processUptimeSeconds}`,
+    '# TYPE dynamic_mcp_http_sessions_active gauge',
+    `dynamic_mcp_http_sessions_active ${values.sessionsActive}`,
+    '# TYPE dynamic_mcp_http_sessions_created_total counter',
+    `dynamic_mcp_http_sessions_created_total ${values.sessionsCreatedTotal}`,
+    '# TYPE dynamic_mcp_http_auth_success_total counter',
+    `dynamic_mcp_http_auth_success_total ${values.authSuccessTotal}`,
+    '# TYPE dynamic_mcp_http_auth_denied_total counter',
+    `dynamic_mcp_http_auth_denied_total ${values.authDeniedTotal}`,
+    ''
+  ].join('\n');
 }
 
 function createReadinessCheck(dynamic: HttpServerOptions['dynamic']): () => Promise<void> {
