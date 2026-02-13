@@ -1,7 +1,7 @@
 {
   "name": "dynamic-mcp",
   "version": "0.1.0",
-  "description": "A production-grade **dynamic MCP server** for Node.js that enables runtime tool creation, management, and execution in isolated Docker sandboxes",
+  "description": "A production-grade **dynamic MCP server** for Node.js",
   "type": "module",
   "packageManager": "pnpm@10.29.3",
   "engines": {
@@ -29,6 +29,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "format": "prettier --write .",
+    "commit": "git-cz",
     "format:check": "prettier --check ."
   },
   "dependencies": {
@@ -43,6 +44,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^25.2.3",
     "@types/pg": "^8.16.0",
+    "commitizen": "^4.3.1",
     "eslint": "^10.0.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.3.0",
@@ -51,5 +53,12 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.55.0",
     "vitest": "^4.0.18"
-  }
+  },
+  "config": {
+    "commitizen": {
+      "path": "cz-conventional-changelog"
+    }
+  },
+  "author": "unadlib",
+  "license": "MIT"
 }
