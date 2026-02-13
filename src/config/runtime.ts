@@ -10,6 +10,7 @@ export interface RuntimeConfig {
     port: number;
     path: string;
     sessionTtlSeconds: number;
+    maxRequestBytes: number;
   };
   dynamic: {
     backend: 'file' | 'postgres';
@@ -113,6 +114,11 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
         args['http-session-ttl-seconds'] ?? env.MCP_HTTP_SESSION_TTL_SECONDS ?? '1800',
         'MCP HTTP session TTL seconds',
         604_800
+      ),
+      maxRequestBytes: parsePositiveInteger(
+        args['http-max-request-bytes'] ?? env.MCP_HTTP_MAX_REQUEST_BYTES ?? '1000000',
+        'MCP HTTP max request bytes',
+        100_000_000
       )
     },
     dynamic: loadDynamicConfig({

@@ -23,6 +23,7 @@ export interface HttpTransportConfig {
   port: number;
   path: string;
   sessionTtlSeconds: number;
+  maxRequestBytes: number;
 }
 
 export interface HttpServerHandle {
@@ -87,6 +88,30 @@ export async function startHttpTransport(
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'no-referrer');
+    next();
+  });
+  app.use((req, res, next) => {
+    if (req.method !== 'POST' && req.method !== 'DELETE') {
+      next();
+      return;
+    }
+
+    const contentLengthHeader = req.headers['content-length'];
+    const raw = Array.isArray(contentLengthHeader) ? contentLengthHeader[0] : contentLengthHeader;
+    const contentLength = raw ? Number.parseInt(raw, 10) : NaN;
+    if (Number.isInteger(contentLength) && contentLength > config.maxRequestBytes) {
+      const requestId = resolveRequestId(req, res);
+      sendJsonRpcError(
+        res,
+        413,
+        -32013,
+        `Request body too large. Max allowed bytes: ${config.maxRequestBytes}.`,
+        undefined,
+        requestId
+      );
+      return;
+    }
+
     next();
   });
   const readinessCheck = createReadinessCheck(options.dynamic);

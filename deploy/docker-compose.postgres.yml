@@ -29,6 +29,7 @@ services:
       MCP_HOST: 0.0.0.0
       MCP_PORT: 8788
       MCP_PATH: /mcp
+      MCP_HTTP_MAX_REQUEST_BYTES: 1000000
 
       MCP_DYNAMIC_BACKEND: postgres
       MCP_DYNAMIC_PG_URL: postgres://dynamic_mcp:change-me@postgres:5432/dynamic_mcp

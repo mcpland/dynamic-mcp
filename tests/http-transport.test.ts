@@ -28,7 +28,8 @@ describe('http transport health probes', () => {
         host: '127.0.0.1',
         port,
         path: '/mcp',
-        sessionTtlSeconds: 1800
+        sessionTtlSeconds: 1800,
+        maxRequestBytes: 1_000_000
       },
       {
         dynamic: {
@@ -88,7 +89,8 @@ describe('http transport health probes', () => {
         host: '127.0.0.1',
         port,
         path: '/mcp',
-        sessionTtlSeconds: 1800
+        sessionTtlSeconds: 1800,
+        maxRequestBytes: 1_000_000
       },
       {
         dynamic: {
@@ -137,7 +139,8 @@ describe('http transport health probes', () => {
         host: '127.0.0.1',
         port,
         path: '/mcp',
-        sessionTtlSeconds: 1800
+        sessionTtlSeconds: 1800,
+        maxRequestBytes: 1_000_000
       },
       {
         dynamic: {
@@ -180,6 +183,68 @@ describe('http transport health probes', () => {
     expect(text).toContain('dynamic_mcp_http_sessions_expired_total');
     expect(text).toContain('dynamic_mcp_http_auth_success_total');
     expect(text).toContain('dynamic_mcp_http_auth_denied_total');
+  });
+
+  it('rejects oversized request bodies', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dynamic-mcp-http-body-limit-'));
+    const port = await getFreePort();
+    const handle = await startHttpTransport(
+      {
+        host: '127.0.0.1',
+        port,
+        path: '/mcp',
+        sessionTtlSeconds: 1800,
+        maxRequestBytes: 64
+      },
+      {
+        dynamic: {
+          backend: 'file',
+          storeFilePath: join(root, 'tools.json'),
+          maxTools: 16,
+          readOnly: false
+        },
+        sandbox: {
+          dockerBinary: 'docker',
+          memoryLimit: '512m',
+          cpuLimit: '1',
+          maxDependencies: 8,
+          maxOutputBytes: 200_000,
+          maxTimeoutMs: 60_000,
+          allowedImages: ['node:lts-slim'],
+          blockedPackages: [],
+          sessionTimeoutSeconds: 1_800,
+          maxSessions: 20
+        },
+        security: {
+          toolMaxConcurrency: 8,
+          toolMaxCallsPerWindow: 1000,
+          toolRateWindowMs: 60_000
+        },
+        auth: {
+          mode: 'none'
+        },
+        auditLogger: createTestAuditLogger()
+      }
+    );
+    openHandles.push(handle);
+
+    const response = await fetch(`http://127.0.0.1:${port}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        payload: 'x'.repeat(400)
+      })
+    });
+
+    expect(response.status).toBe(413);
+    const body = (await response.json()) as {
+      error?: {
+        message?: string;
+      };
+    };
+    expect(body.error?.message).toMatch(/too large/i);
   });
 });
 

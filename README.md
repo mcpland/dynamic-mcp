@@ -39,6 +39,7 @@ A production-oriented **dynamic MCP server** in Node.js, with secure Docker sand
 - Allowlist/denylist controls for images and npm packages.
 - Runtime guard for anti-abuse throttling.
 - Hardened HTTP response headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`).
+- HTTP request body size limit (`MCP_HTTP_MAX_REQUEST_BYTES`) for DoS resistance.
 - Optional JWT auth in HTTP mode (JWKS/issuer/audience/scope).
 - Structured JSONL audit logging for privileged/runtime actions.
 - Structured JSONL audit logging with shutdown flush guarantees.
@@ -78,6 +79,7 @@ Key vars:
 
 - `MCP_TRANSPORT`
 - `MCP_HTTP_SESSION_TTL_SECONDS`
+- `MCP_HTTP_MAX_REQUEST_BYTES`
 - `MCP_DYNAMIC_STORE`
 - `MCP_DYNAMIC_BACKEND` (`file` or `postgres`)
 - `MCP_DYNAMIC_PG_URL`
