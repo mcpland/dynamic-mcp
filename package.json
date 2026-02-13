@@ -59,6 +59,15 @@
       "path": "cz-conventional-changelog"
     }
   },
+  "keywords": [
+    "mcp",
+    "dynamic",
+    "docker",
+    "sandbox",
+    "tool",
+    "runtime",
+    "nodejs"
+  ],
   "author": "unadlib",
   "license": "MIT"
 }
