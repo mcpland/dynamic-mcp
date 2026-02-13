@@ -59,20 +59,20 @@ Set `MCP_PROFILE=enterprise` to enable additional platform/ops features:
 ## Quick start
 
 ```bash
-npm install
-npm run dev:mvp
+pnpm install
+pnpm run dev:mvp
 ```
 
 HTTP mode:
 
 ```bash
-npm run dev:http
+pnpm run dev:http
 ```
 
 Enterprise profile:
 
 ```bash
-npm run dev:enterprise
+pnpm run dev:enterprise
 ```
 
 Default endpoint: `http://127.0.0.1:8788/mcp`
@@ -172,15 +172,15 @@ silently overwriting newer updates.
 
 ## Scripts
 
-- `npm run dev`
-- `npm run dev:mvp`
-- `npm run dev:enterprise`
-- `npm run dev:stdio`
-- `npm run dev:http`
-- `npm run lint`
-- `npm run test`
-- `npm run build`
-- `npm run typecheck`
+- `pnpm run dev`
+- `pnpm run dev:mvp`
+- `pnpm run dev:enterprise`
+- `pnpm run dev:stdio`
+- `pnpm run dev:http`
+- `pnpm run lint`
+- `pnpm run test`
+- `pnpm run build`
+- `pnpm run typecheck`
 
 ## CI and Docker
 
