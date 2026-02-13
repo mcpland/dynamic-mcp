@@ -6,6 +6,12 @@
 - **Docker** (required for tool execution)
 - **pnpm** (for building from source)
 
+## Recommended Baseline
+
+- Local development and PoC: use [`.env.example`](../.env.example)
+- Production baseline: use [`.env.prod.example`](../.env.prod.example)
+- Rollout and rollback procedure: follow [`docs/production-runbook.md`](production-runbook.md)
+
 ## Local Development
 
 ```bash
@@ -66,7 +72,7 @@ To execute dynamic tools in Docker/Kubernetes, the `dynamic-mcp` process needs b
 1. A Docker CLI binary inside the runtime container (`docker`)
 2. Reachable Docker daemon credentials (local socket or remote daemon)
 
-If either is missing, calls to `dynamic.exec.*`, `run_js_ephemeral`, and `sandbox.*` fail with Docker availability errors.
+If either is missing, calls to registered dynamic tools, `run_js_ephemeral`, and `sandbox.*` fail with Docker availability errors.
 
 Common production approach:
 
@@ -244,6 +250,7 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) runs:
 |-----|-------------|
 | `verify` | Lint, test, and build on Node.js 20 and 22 |
 | `docker-http-smoke` | Build Docker image and verify `/livez` + `/readyz` |
+| `docker-http-jwt-smoke` | Verify `/mcp` JWT enforcement and anonymous `/livez` `/readyz` `/metrics` behavior |
 | `compose-postgres-smoke` | Start the full Compose stack and verify readiness |
 | `k8s-manifest-validate` | Dry-run kubectl apply on all Kubernetes manifests |
 

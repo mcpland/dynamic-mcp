@@ -36,6 +36,11 @@ pnpm run dev:enterprise
 
 HTTP mode default endpoint: `http://127.0.0.1:8788/mcp`
 
+## Recommended Operating Modes
+
+- Development / PoC: `mvp` profile + `stdio` transport + file backend (`.env.example`)
+- Production: `enterprise` profile + `http` transport + JWT auth + PostgreSQL backend (`.env.prod.example`)
+
 ## MCP Server Configuration
 
 This project supports both MCP standard transports:
@@ -217,9 +222,11 @@ Production recommendation: keep `/livez`, `/readyz`, `/metrics` behind private n
 
 ```bash
 MCP_TRANSPORT=http
+MCP_PROFILE=enterprise
 MCP_HOST=0.0.0.0
 MCP_PORT=8788
 MCP_PATH=/mcp
+MCP_DYNAMIC_BACKEND=postgres
 MCP_AUTH_MODE=jwt
 MCP_AUTH_JWKS_URL=https://your-idp.example.com/.well-known/jwks.json
 MCP_AUTH_ISSUER=https://your-idp.example.com/
@@ -228,6 +235,11 @@ MCP_AUTH_REQUIRED_SCOPES=mcp.invoke
 ```
 
 Full variable reference: [docs/configuration.md](docs/configuration.md)
+
+Production baseline assets:
+
+- [`.env.prod.example`](.env.prod.example)
+- [`docs/production-runbook.md`](docs/production-runbook.md)
 
 ## Documentation
 
@@ -239,6 +251,7 @@ Full variable reference: [docs/configuration.md](docs/configuration.md)
 | [Dynamic Tools Guide](docs/dynamic-tools.md) | How to author and manage dynamic tools                |
 | [Security](docs/security.md)                 | Security model, sandbox isolation, and authentication |
 | [Deployment](docs/deployment.md)             | Docker, Compose, and Kubernetes deployment guides     |
+| [Production Runbook](docs/production-runbook.md) | Production rollout, verification, and rollback steps |
 
 ## Profiles
 

@@ -4,6 +4,13 @@ dynamic-mcp supports configuration via environment variables, CLI arguments, and
 
 CLI argument format: `--key=value` or `--key value`
 
+## Baseline Templates
+
+- Development/PoC baseline: [`.env.example`](../.env.example) (`mvp` + `stdio`)
+- Production baseline: [`.env.prod.example`](../.env.prod.example) (`enterprise` + `http` + `jwt` + `postgres`)
+
+For deployment workflow, acceptance checks, and rollback procedure, see [`docs/production-runbook.md`](production-runbook.md).
+
 ## General
 
 | Env Variable | CLI Arg | Default | Description |
@@ -119,4 +126,4 @@ Global concurrency and rate limiting for all tool executions.
 
 ## Example `.env`
 
-See the [.env.example](../.env.example) file for a complete template with all variables and their defaults.
+See [`.env.example`](../.env.example) for local development defaults, and [`.env.prod.example`](../.env.prod.example) for a production-ready baseline template.

@@ -82,6 +82,141 @@ jobs:
         if: always()
         run: docker rm -f dynamic-mcp-http || true
 
+  docker-http-jwt-smoke:
+    runs-on: ubuntu-latest
+    needs: verify
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t dynamic-mcp:test .
+
+      - name: Prepare CI JWKS and JWT
+        run: |
+          mkdir -p .tmp/ci-jwt
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import hmac
+          import json
+          import pathlib
+          import time
+
+          secret = b"dynamic-mcp-ci-shared-secret"
+
+          def b64url(data: bytes) -> str:
+              return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+          now = int(time.time())
+          header = {"alg": "HS256", "typ": "JWT", "kid": "ci-hs256-key"}
+          payload = {
+              "iss": "https://ci-issuer.example.com/",
+              "aud": "dynamic-mcp",
+              "sub": "ci-workflow",
+              "scope": "mcp.invoke",
+              "iat": now,
+              "exp": now + 600,
+          }
+          header_part = b64url(json.dumps(header, separators=(",", ":")).encode("utf-8"))
+          payload_part = b64url(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+          signing_input = f"{header_part}.{payload_part}".encode("ascii")
+          signature = b64url(hmac.new(secret, signing_input, hashlib.sha256).digest())
+          token = f"{header_part}.{payload_part}.{signature}"
+
+          jwks = {
+              "keys": [
+                  {
+                      "kty": "oct",
+                      "kid": "ci-hs256-key",
+                      "alg": "HS256",
+                      "use": "sig",
+                      "k": b64url(secret),
+                  }
+              ]
+          }
+
+          output_dir = pathlib.Path(".tmp/ci-jwt")
+          (output_dir / "jwks.json").write_text(json.dumps(jwks), encoding="utf-8")
+          (output_dir / "token.txt").write_text(token, encoding="utf-8")
+          PY
+          echo "JWT_TOKEN=$(cat .tmp/ci-jwt/token.txt)" >> "$GITHUB_ENV"
+
+      - name: Start JWKS server
+        run: |
+          docker network create dynamic-mcp-ci
+          docker run -d --name dynamic-mcp-jwks \
+            --network dynamic-mcp-ci \
+            -v "$PWD/.tmp/ci-jwt:/usr/share/nginx/html:ro" \
+            nginx:alpine
+
+      - name: Run HTTP container with JWT enabled
+        run: |
+          docker run -d --name dynamic-mcp-http-jwt \
+            --network dynamic-mcp-ci \
+            -p 8788:8788 \
+            -e MCP_TRANSPORT=http \
+            -e MCP_HOST=0.0.0.0 \
+            -e MCP_PORT=8788 \
+            -e MCP_AUTH_MODE=jwt \
+            -e MCP_AUTH_JWKS_URL=http://dynamic-mcp-jwks/jwks.json \
+            -e MCP_AUTH_ISSUER=https://ci-issuer.example.com/ \
+            -e MCP_AUTH_AUDIENCE=dynamic-mcp \
+            -e MCP_AUTH_REQUIRED_SCOPES=mcp.invoke \
+            dynamic-mcp:test
+
+      - name: Wait for readiness
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8788/readyz >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "JWT-enabled container did not become ready in time."
+          docker logs dynamic-mcp-http-jwt
+          exit 1
+
+      - name: Verify JWT protection and operational endpoints
+        run: |
+          no_auth_status="$(curl -sS -o /tmp/mcp-no-auth.json -w "%{http_code}" \
+            -X POST http://127.0.0.1:8788/mcp \
+            -H 'content-type: application/json' \
+            --data '{}')"
+          if [ "$no_auth_status" -ne 401 ]; then
+            echo "Expected 401 for unauthenticated /mcp request, got: $no_auth_status"
+            cat /tmp/mcp-no-auth.json || true
+            exit 1
+          fi
+
+          auth_status="$(curl -sS -o /tmp/mcp-with-auth.json -w "%{http_code}" \
+            -X POST http://127.0.0.1:8788/mcp \
+            -H "Authorization: Bearer $JWT_TOKEN" \
+            -H 'content-type: application/json' \
+            --data '{}')"
+          if [ "$auth_status" -eq 401 ] || [ "$auth_status" -eq 403 ]; then
+            echo "Expected authenticated /mcp request to bypass auth rejection, got: $auth_status"
+            cat /tmp/mcp-with-auth.json || true
+            exit 1
+          fi
+
+          curl -fsS http://127.0.0.1:8788/livez >/dev/null
+          curl -fsS http://127.0.0.1:8788/readyz >/dev/null
+          curl -fsS http://127.0.0.1:8788/metrics >/dev/null
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          docker logs dynamic-mcp-http-jwt || true
+          docker logs dynamic-mcp-jwks || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f dynamic-mcp-http-jwt dynamic-mcp-jwks || true
+          docker network rm dynamic-mcp-ci || true
+
   compose-postgres-smoke:
     runs-on: ubuntu-latest
     needs: verify
