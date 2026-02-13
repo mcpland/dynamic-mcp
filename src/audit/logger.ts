@@ -44,33 +44,41 @@ export class AuditLogger {
       return Promise.resolve();
     }
 
-    this.writeChain = this.writeChain.then(async () => {
-      const payload = {
-        timestamp: new Date().toISOString(),
-        service: this.service,
-        serviceVersion: this.serviceVersion,
-        ...event
-      };
-
-      let line = JSON.stringify(payload);
-      if (Buffer.byteLength(line, 'utf8') > this.maxEventBytes) {
-        const reduced = {
-          ...payload,
-          details: {
-            truncated: true,
-            reason: `payload exceeds ${this.maxEventBytes} bytes`
-          }
+    this.writeChain = this.writeChain
+      .catch(() => {
+        // Keep the chain alive after failed writes.
+      })
+      .then(async () => {
+        const payload = {
+          timestamp: new Date().toISOString(),
+          service: this.service,
+          serviceVersion: this.serviceVersion,
+          ...event
         };
-        line = JSON.stringify(reduced);
-      }
 
-      await mkdir(dirname(this.filePath), { recursive: true });
-      await this.rotateIfNeeded(line);
-      await appendFile(this.filePath, `${line}\n`, 'utf8');
-    });
+        let line = JSON.stringify(payload);
+        if (Buffer.byteLength(line, 'utf8') > this.maxEventBytes) {
+          const reduced = {
+            ...payload,
+            details: {
+              truncated: true,
+              reason: `payload exceeds ${this.maxEventBytes} bytes`
+            }
+          };
+          line = JSON.stringify(reduced);
+        }
 
+        await mkdir(dirname(this.filePath), { recursive: true });
+        await this.rotateIfNeeded(line);
+        await appendFile(this.filePath, `${line}\n`, 'utf8');
+      });
+
+    return this.flush();
+  }
+
+  flush(): Promise<void> {
     return this.writeChain.catch(() => {
-      // Keep audit failures from breaking tool execution.
+      // Keep audit failures from breaking caller flows.
     });
   }
 

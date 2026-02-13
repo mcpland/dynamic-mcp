@@ -72,4 +72,39 @@ describe('AuditLogger', () => {
 
     expect(parsed.details?.truncated).toBe(true);
   });
+
+  it('flush waits for queued writes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dynamic-mcp-audit-flush-'));
+    const filePath = join(root, 'audit.log');
+
+    const logger = new AuditLogger({
+      enabled: true,
+      filePath,
+      maxEventBytes: 10_000,
+      maxFileBytes: 10_000,
+      maxFiles: 2,
+      service: 'dynamic-mcp-test',
+      serviceVersion: 'test'
+    });
+
+    void logger.log({
+      action: 'dynamic.tool.create',
+      actor: 'tester',
+      result: 'success'
+    });
+    void logger.log({
+      action: 'dynamic.tool.update',
+      actor: 'tester',
+      result: 'success'
+    });
+
+    await logger.flush();
+
+    const content = await readFile(filePath, 'utf8');
+    const lines = content
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    expect(lines.length).toBe(2);
+  });
 });

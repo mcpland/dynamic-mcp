@@ -28,7 +28,7 @@ async function main(): Promise<void> {
     });
     installShutdownHandlers(async () => {
       await server.close();
-    });
+    }, auditLogger);
     await startStdioTransport(server);
     console.error('[dynamic-mcp] running in stdio mode');
     return;
@@ -47,10 +47,13 @@ async function main(): Promise<void> {
 
   installShutdownHandlers(async () => {
     await serverHandle.stop();
-  });
+  }, auditLogger);
 }
 
-function installShutdownHandlers(stopTransport: () => Promise<void>): void {
+function installShutdownHandlers(
+  stopTransport: () => Promise<void>,
+  auditLogger: AuditLogger
+): void {
   let shuttingDown = false;
   const shutdown = async (signal: 'SIGINT' | 'SIGTERM'): Promise<void> => {
     if (shuttingDown) {
@@ -61,6 +64,7 @@ function installShutdownHandlers(stopTransport: () => Promise<void>): void {
     try {
       await stopTransport();
       await closeAllSharedPostgresPools();
+      await auditLogger.flush();
     } catch (error) {
       console.error(`[dynamic-mcp] ${signal} shutdown error:`, error);
       process.exit(1);
