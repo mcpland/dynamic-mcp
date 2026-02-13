@@ -10,6 +10,7 @@ describe('loadRuntimeConfig', () => {
     expect(config.http.host).toBe('127.0.0.1');
     expect(config.http.port).toBe(8788);
     expect(config.http.path).toBe('/mcp');
+    expect(config.http.sessionTtlSeconds).toBe(1800);
     expect(config.dynamic.backend).toBe('file');
     expect(config.dynamic.storeFilePath.endsWith('.dynamic-mcp/tools.json')).toBe(true);
     expect(config.dynamic.maxTools).toBe(256);
@@ -34,6 +35,8 @@ describe('loadRuntimeConfig', () => {
         'http',
         '--path',
         'gateway',
+        '--http-session-ttl-seconds',
+        '90',
         '--dynamic-max-tools',
         '12',
         '--admin-token',
@@ -46,6 +49,7 @@ describe('loadRuntimeConfig', () => {
 
     expect(config.transport).toBe('http');
     expect(config.http.path).toBe('/gateway');
+    expect(config.http.sessionTtlSeconds).toBe(90);
     expect(config.dynamic.backend).toBe('file');
     expect(config.dynamic.maxTools).toBe(12);
     expect(config.dynamic.readOnly).toBe(false);

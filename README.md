@@ -68,6 +68,7 @@ Health probes:
 - `GET /readyz` -> backend readiness (checks dynamic registry backend dependencies)
 - `GET /metrics` -> Prometheus-style runtime metrics
 - All HTTP responses include `x-request-id` (propagated from request header if provided).
+- HTTP MCP sessions are auto-expired by `MCP_HTTP_SESSION_TTL_SECONDS`.
 
 ## Environment variables
 
@@ -76,6 +77,7 @@ See `.env.example`.
 Key vars:
 
 - `MCP_TRANSPORT`
+- `MCP_HTTP_SESSION_TTL_SECONDS`
 - `MCP_DYNAMIC_STORE`
 - `MCP_DYNAMIC_BACKEND` (`file` or `postgres`)
 - `MCP_DYNAMIC_PG_URL`

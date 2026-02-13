@@ -27,7 +27,8 @@ describe('http transport health probes', () => {
       {
         host: '127.0.0.1',
         port,
-        path: '/mcp'
+        path: '/mcp',
+        sessionTtlSeconds: 1800
       },
       {
         dynamic: {
@@ -86,7 +87,8 @@ describe('http transport health probes', () => {
       {
         host: '127.0.0.1',
         port,
-        path: '/mcp'
+        path: '/mcp',
+        sessionTtlSeconds: 1800
       },
       {
         dynamic: {
@@ -134,7 +136,8 @@ describe('http transport health probes', () => {
       {
         host: '127.0.0.1',
         port,
-        path: '/mcp'
+        path: '/mcp',
+        sessionTtlSeconds: 1800
       },
       {
         dynamic: {
@@ -174,6 +177,7 @@ describe('http transport health probes', () => {
     expect(text).toContain('dynamic_mcp_process_uptime_seconds');
     expect(text).toContain('dynamic_mcp_http_sessions_active');
     expect(text).toContain('dynamic_mcp_http_sessions_created_total');
+    expect(text).toContain('dynamic_mcp_http_sessions_expired_total');
     expect(text).toContain('dynamic_mcp_http_auth_success_total');
     expect(text).toContain('dynamic_mcp_http_auth_denied_total');
   });

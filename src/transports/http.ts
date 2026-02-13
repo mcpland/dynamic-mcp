@@ -12,11 +12,17 @@ import { JwtAuthVerifier } from '../auth/jwt.js';
 import type { AuditLogger } from '../audit/logger.js';
 import { closeAllSharedPostgresPools, getSharedPostgresPool } from '../dynamic/postgres-pool.js';
 import { createMcpServer } from '../server/create-server.js';
+import {
+  sessionSweepIntervalMs,
+  staleSessionIds,
+  touchSession
+} from './session-expiry.js';
 
 export interface HttpTransportConfig {
   host: string;
   port: number;
   path: string;
+  sessionTtlSeconds: number;
 }
 
 export interface HttpServerHandle {
@@ -85,6 +91,7 @@ export async function startHttpTransport(
   });
   const readinessCheck = createReadinessCheck(options.dynamic);
   let sessionsCreatedTotal = 0;
+  let sessionsExpiredTotal = 0;
   let authSuccessTotal = 0;
   let authDeniedTotal = 0;
   const jwtVerifier =
@@ -98,7 +105,20 @@ export async function startHttpTransport(
         })
       : null;
   const sessions = new Map<string, Session>();
+  const sessionLastSeenMs = new Map<string, number>();
   const closingSessions = new Set<string>();
+  const sessionTtlMs = config.sessionTtlSeconds * 1000;
+  const sweepTimer = setInterval(() => {
+    const staleIds = staleSessionIds(sessionLastSeenMs, Date.now(), sessionTtlMs);
+    for (const sessionId of staleIds) {
+      sessionLastSeenMs.delete(sessionId);
+      sessionsExpiredTotal += 1;
+      void closeSession(sessionId);
+    }
+  }, sessionSweepIntervalMs(sessionTtlMs));
+  if (typeof sweepTimer.unref === 'function') {
+    sweepTimer.unref();
+  }
 
   const closeSession = async (sessionId: string): Promise<void> => {
     if (closingSessions.has(sessionId)) {
@@ -112,6 +132,7 @@ export async function startHttpTransport(
 
     closingSessions.add(sessionId);
     sessions.delete(sessionId);
+    sessionLastSeenMs.delete(sessionId);
 
     try {
       await session.transport.close();
@@ -141,6 +162,7 @@ export async function startHttpTransport(
       onsessioninitialized: (sessionId) => {
         sessionsCreatedTotal += 1;
         sessions.set(sessionId, { server, transport });
+        touchSession(sessionLastSeenMs, sessionId);
       },
       onsessionclosed: async (sessionId) => {
         await closeSession(sessionId);
@@ -183,6 +205,7 @@ export async function startHttpTransport(
           return;
         }
 
+        touchSession(sessionLastSeenMs, sessionId);
         await existing.transport.handleRequest(req, res, req.body);
         return;
       }
@@ -233,6 +256,7 @@ export async function startHttpTransport(
       return;
     }
 
+    touchSession(sessionLastSeenMs, sessionId);
     try {
       await existing.transport.handleRequest(req, res, req.body);
     } catch (error) {
@@ -267,6 +291,7 @@ export async function startHttpTransport(
       return;
     }
 
+    touchSession(sessionLastSeenMs, sessionId);
     try {
       await existing.transport.handleRequest(req, res, req.body);
     } catch (error) {
@@ -305,6 +330,7 @@ export async function startHttpTransport(
         processUptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
         sessionsActive: sessions.size,
         sessionsCreatedTotal,
+        sessionsExpiredTotal,
         authSuccessTotal,
         authDeniedTotal
       })
@@ -319,6 +345,7 @@ export async function startHttpTransport(
         await closeSession(sessionId);
       }
 
+      clearInterval(sweepTimer);
       await closeServer(httpServer);
       await closeAllSharedPostgresPools();
     }
@@ -481,6 +508,7 @@ function formatPrometheusMetrics(values: {
   processUptimeSeconds: number;
   sessionsActive: number;
   sessionsCreatedTotal: number;
+  sessionsExpiredTotal: number;
   authSuccessTotal: number;
   authDeniedTotal: number;
 }): string {
@@ -491,6 +519,8 @@ function formatPrometheusMetrics(values: {
     `dynamic_mcp_http_sessions_active ${values.sessionsActive}`,
     '# TYPE dynamic_mcp_http_sessions_created_total counter',
     `dynamic_mcp_http_sessions_created_total ${values.sessionsCreatedTotal}`,
+    '# TYPE dynamic_mcp_http_sessions_expired_total counter',
+    `dynamic_mcp_http_sessions_expired_total ${values.sessionsExpiredTotal}`,
     '# TYPE dynamic_mcp_http_auth_success_total counter',
     `dynamic_mcp_http_auth_success_total ${values.authSuccessTotal}`,
     '# TYPE dynamic_mcp_http_auth_denied_total counter',

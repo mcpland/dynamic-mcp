@@ -9,6 +9,7 @@ export interface RuntimeConfig {
     host: string;
     port: number;
     path: string;
+    sessionTtlSeconds: number;
   };
   dynamic: {
     backend: 'file' | 'postgres';
@@ -107,7 +108,12 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
     http: {
       host,
       port: parsePort(portValue),
-      path: normalizePath(pathValue)
+      path: normalizePath(pathValue),
+      sessionTtlSeconds: parsePositiveInteger(
+        args['http-session-ttl-seconds'] ?? env.MCP_HTTP_SESSION_TTL_SECONDS ?? '1800',
+        'MCP HTTP session TTL seconds',
+        604_800
+      )
     },
     dynamic: loadDynamicConfig({
       backend: dynamicBackend,
