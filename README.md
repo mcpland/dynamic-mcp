@@ -14,6 +14,7 @@ Default profile is `mvp` (`MCP_PROFILE=mvp`), focused on dynamic Node.js tool ex
   - `dynamic.tool.get`
   - `dynamic.tool.enable`
 - Dynamic tool runtime execution in isolated Docker containers.
+- Built-in one-off execution tool: `run_js_ephemeral`.
 - Global execution guard (concurrency + rate limit).
 
 ## Enterprise profile extras
@@ -145,6 +146,19 @@ Then invoke the tool with:
 ```json
 {
   "args": { "text": "hello" }
+}
+```
+
+## Quick one-off JS
+
+Call built-in tool `run_js_ephemeral`:
+
+```json
+{
+  "code": "return { upper: String(args.text).toUpperCase() };",
+  "args": { "text": "hello" },
+  "dependencies": [],
+  "image": "node:lts-slim"
 }
 ```
 

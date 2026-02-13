@@ -365,6 +365,10 @@ export class DynamicToolService {
     if (name.startsWith('dynamic.tool.')) {
       throw new Error(`Reserved tool name prefix is not allowed: ${name}`);
     }
+
+    if (name === 'run_js_ephemeral') {
+      throw new Error(`Reserved built-in tool name is not allowed: ${name}`);
+    }
   }
 
   private assertWritesAllowed(operation: string): void {

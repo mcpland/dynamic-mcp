@@ -67,6 +67,7 @@ describe('createMcpServer', () => {
     expect(toolNames).toContain('system.runtime_config');
     expect(toolNames).toContain('dev.echo');
     expect(toolNames).toContain('time.now');
+    expect(toolNames).toContain('run_js_ephemeral');
     expect(toolNames).toContain('sandbox.initialize');
     expect(toolNames).toContain('sandbox.exec');
     expect(toolNames).toContain('sandbox.run_js');
@@ -149,11 +150,20 @@ describe('createMcpServer', () => {
     expect(toolNames).toContain('system.health');
     expect(toolNames).toContain('dynamic.tool.create');
     expect(toolNames).toContain('dynamic.tool.update');
+    expect(toolNames).toContain('run_js_ephemeral');
     expect(toolNames).not.toContain('dev.echo');
     expect(toolNames).not.toContain('time.now');
     expect(toolNames).not.toContain('system.guard_metrics');
     expect(toolNames).not.toContain('system.runtime_config');
     expect(toolNames).not.toContain('sandbox.initialize');
+
+    const quickRun = await client.callTool({
+      name: 'run_js_ephemeral',
+      arguments: {
+        code: 'return { ok: true };'
+      }
+    });
+    expect(quickRun.content[0]?.type).toBe('text');
   });
 });
 

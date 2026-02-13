@@ -61,6 +61,14 @@ describe('dynamic tool service', () => {
     expect(runResult.isError).toBe(true);
     expect(runResult.content[0]?.type).toBe('text');
 
+    const quickRun = await client.callTool({
+      name: 'run_js_ephemeral',
+      arguments: {
+        code: 'return { hello: "world" };'
+      }
+    });
+    expect(quickRun.content[0]?.type).toBe('text');
+
     const firstUpdate = await client.callTool({
       name: 'dynamic.tool.update',
       arguments: {

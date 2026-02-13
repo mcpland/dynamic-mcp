@@ -8,6 +8,7 @@ import { PostgresDynamicToolRegistry } from '../dynamic/postgres-registry.js';
 import { DynamicToolRegistry } from '../dynamic/registry.js';
 import type { DynamicToolRegistryPort } from '../dynamic/registry-port.js';
 import { DynamicToolService } from '../dynamic/service.js';
+import { DynamicDependencySchema, type DynamicToolRecord } from '../dynamic/spec.js';
 import { registerSessionSandboxTools } from '../sandbox/register-session-tools.js';
 import { ToolExecutionGuard } from '../security/guard.js';
 import type { AuditLogger } from '../audit/logger.js';
@@ -77,6 +78,18 @@ const RuntimeConfigOutputSchema = z.object({
     enabled: z.boolean()
   })
 });
+
+const RunJsEphemeralInputSchema = {
+  code: z
+    .string()
+    .min(1)
+    .max(200_000)
+    .describe('JavaScript function body to execute inside export async function run(args) { ... }'),
+  args: z.record(z.string(), z.unknown()).default({}),
+  image: z.string().min(1).max(200).optional().describe('Optional Docker image override'),
+  dependencies: z.array(DynamicDependencySchema).max(64).default([]),
+  timeoutMs: z.number().int().min(1000).max(120_000).optional()
+};
 
 export interface CreateMcpServerOptions {
   profile: 'mvp' | 'enterprise';
@@ -329,6 +342,40 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
   });
   await dynamicService.initialize();
 
+  server.registerTool(
+    'run_js_ephemeral',
+    {
+      title: 'Run JS Ephemeral',
+      description: 'Execute one-off Node.js code in an isolated Docker sandbox without persisting a tool',
+      inputSchema: RunJsEphemeralInputSchema
+    },
+    async ({ code, args, image, dependencies, timeoutMs }) => {
+      return runGuarded(executionGuard, options.auditLogger, 'run_js_ephemeral', async () => {
+        const now = new Date().toISOString();
+        const record = buildEphemeralToolRecord({
+          code,
+          image: image ?? options.sandbox.allowedImages[0] ?? 'node:lts-slim',
+          dependencies,
+          timeoutMs: timeoutMs ?? Math.min(30_000, options.sandbox.maxTimeoutMs),
+          now
+        });
+
+        const result = await executionEngine.execute(record, args);
+        void options.auditLogger.log({
+          action: 'run_js_ephemeral',
+          actor: 'user',
+          result: result.isError ? 'error' : 'success',
+          details: {
+            image: record.image,
+            dependencyCount: record.dependencies.length
+          }
+        });
+
+        return result;
+      });
+    }
+  );
+
   if (options.profile === 'enterprise') {
     server.registerResource(
       'guard.metrics',
@@ -508,4 +555,55 @@ function buildRuntimeConfigSnapshot(
       enabled: options.auditLogger.isEnabled()
     }
   };
+}
+
+function buildEphemeralToolRecord(input: {
+  code: string;
+  image: string;
+  dependencies: DynamicToolRecord['dependencies'];
+  timeoutMs: number;
+  now: string;
+}): DynamicToolRecord {
+  return {
+    name: 'run_js_ephemeral',
+    title: 'Run JS Ephemeral',
+    description: 'Ephemeral one-off Node.js execution',
+    image: input.image,
+    timeoutMs: input.timeoutMs,
+    dependencies: input.dependencies,
+    code: input.code,
+    enabled: true,
+    createdAt: input.now,
+    updatedAt: input.now,
+    revision: 1
+  };
+}
+
+async function runGuarded(
+  guard: ToolExecutionGuard,
+  auditLogger: AuditLogger,
+  scope: string,
+  work: () => Promise<CallToolResult>
+): Promise<CallToolResult> {
+  try {
+    return await guard.run(scope, work);
+  } catch (error) {
+    void auditLogger.log({
+      action: scope,
+      actor: 'system',
+      result: 'error',
+      details: {
+        message: error instanceof Error ? error.message : String(error)
+      }
+    });
+    return {
+      isError: true,
+      content: [
+        {
+          type: 'text',
+          text: error instanceof Error ? error.message : String(error)
+        }
+      ]
+    };
+  }
 }
