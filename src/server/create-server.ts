@@ -41,6 +41,42 @@ const TimeOutputSchema = z.object({
   timeZone: z.string()
 });
 
+const RuntimeConfigOutputSchema = z.object({
+  transports: z.array(z.string()),
+  dynamic: z.object({
+    backend: z.enum(['file', 'postgres']),
+    maxTools: z.number().int().positive(),
+    adminTokenConfigured: z.boolean(),
+    postgresSchema: z.string().optional(),
+    postgresInitMaxAttempts: z.number().int().positive().optional(),
+    postgresInitBackoffMs: z.number().int().positive().optional()
+  }),
+  auth: z.object({
+    mode: z.enum(['none', 'jwt']),
+    jwtConfigured: z.boolean(),
+    requiredScopes: z.array(z.string())
+  }),
+  security: z.object({
+    toolMaxConcurrency: z.number().int().positive(),
+    toolMaxCallsPerWindow: z.number().int().positive(),
+    toolRateWindowMs: z.number().int().positive()
+  }),
+  sandbox: z.object({
+    memoryLimit: z.string(),
+    cpuLimit: z.string(),
+    maxDependencies: z.number().int().positive(),
+    maxOutputBytes: z.number().int().positive(),
+    maxTimeoutMs: z.number().int().positive(),
+    sessionTimeoutSeconds: z.number().int().positive(),
+    maxSessions: z.number().int().positive(),
+    allowedImagesCount: z.number().int().nonnegative(),
+    blockedPackagesCount: z.number().int().nonnegative()
+  }),
+  audit: z.object({
+    enabled: z.boolean()
+  })
+});
+
 export interface CreateMcpServerOptions {
   dynamic: {
     backend: 'file' | 'postgres';
@@ -71,11 +107,21 @@ export interface CreateMcpServerOptions {
     toolMaxCallsPerWindow: number;
     toolRateWindowMs: number;
   };
+  auth: {
+    mode: 'none' | 'jwt';
+    jwt?: {
+      jwksUrl: string;
+      issuer: string;
+      audience: string;
+      requiredScopes: string[];
+    };
+  };
   auditLogger: AuditLogger;
 }
 
 export async function createMcpServer(options: CreateMcpServerOptions): Promise<McpServer> {
   const startedAt = Date.now();
+  const runtimeConfigSnapshot = buildRuntimeConfigSnapshot(options);
 
   const server = new McpServer(
     {
@@ -214,6 +260,27 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
     }
   );
 
+  server.registerResource(
+    'service.runtime_config',
+    'dynamic://service/runtime-config',
+    {
+      title: 'Runtime Config Snapshot',
+      description: 'Sanitized runtime config snapshot for operations and debugging',
+      mimeType: 'application/json'
+    },
+    async (uri) => {
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: 'application/json',
+            text: JSON.stringify(runtimeConfigSnapshot, null, 2)
+          }
+        ]
+      };
+    }
+  );
+
   server.registerPrompt(
     'tool-call-checklist',
     {
@@ -316,6 +383,26 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
     }
   );
 
+  server.registerTool(
+    'system.runtime_config',
+    {
+      title: 'Runtime Config Snapshot',
+      description: 'Return sanitized runtime config snapshot',
+      outputSchema: RuntimeConfigOutputSchema
+    },
+    async () => {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(runtimeConfigSnapshot)
+          }
+        ],
+        structuredContent: runtimeConfigSnapshot
+      };
+    }
+  );
+
   registerSessionSandboxTools(server, {
     dockerBinary: options.sandbox.dockerBinary,
     memoryLimit: options.sandbox.memoryLimit,
@@ -365,4 +452,51 @@ function isValidTimeZone(timeZone: string): boolean {
   } catch {
     return false;
   }
+}
+
+function buildRuntimeConfigSnapshot(
+  options: CreateMcpServerOptions
+): z.infer<typeof RuntimeConfigOutputSchema> {
+  return {
+    transports: ['stdio', 'http'],
+    dynamic: {
+      backend: options.dynamic.backend,
+      maxTools: options.dynamic.maxTools,
+      adminTokenConfigured: Boolean(options.dynamic.adminToken),
+      ...(options.dynamic.backend === 'postgres' && options.dynamic.postgres
+        ? {
+            postgresSchema: options.dynamic.postgres.schema,
+            postgresInitMaxAttempts: options.dynamic.postgres.initMaxAttempts,
+            postgresInitBackoffMs: options.dynamic.postgres.initBackoffMs
+          }
+        : {})
+    },
+    auth: {
+      mode: options.auth.mode,
+      jwtConfigured: options.auth.mode === 'jwt' && Boolean(options.auth.jwt),
+      requiredScopes:
+        options.auth.mode === 'jwt' && options.auth.jwt
+          ? options.auth.jwt.requiredScopes
+          : []
+    },
+    security: {
+      toolMaxConcurrency: options.security.toolMaxConcurrency,
+      toolMaxCallsPerWindow: options.security.toolMaxCallsPerWindow,
+      toolRateWindowMs: options.security.toolRateWindowMs
+    },
+    sandbox: {
+      memoryLimit: options.sandbox.memoryLimit,
+      cpuLimit: options.sandbox.cpuLimit,
+      maxDependencies: options.sandbox.maxDependencies,
+      maxOutputBytes: options.sandbox.maxOutputBytes,
+      maxTimeoutMs: options.sandbox.maxTimeoutMs,
+      sessionTimeoutSeconds: options.sandbox.sessionTimeoutSeconds,
+      maxSessions: options.sandbox.maxSessions,
+      allowedImagesCount: options.sandbox.allowedImages.length,
+      blockedPackagesCount: options.sandbox.blockedPackages.length
+    },
+    audit: {
+      enabled: options.auditLogger.isEnabled()
+    }
+  };
 }

@@ -22,6 +22,9 @@ A production-oriented **dynamic MCP server** in Node.js, with secure Docker sand
 - Guard metrics resource/tool:
   - resource: `dynamic://metrics/guard`
   - tool: `system.guard_metrics`
+- Runtime config snapshot:
+  - resource: `dynamic://service/runtime-config`
+  - tool: `system.runtime_config`
 
 ## Security model
 

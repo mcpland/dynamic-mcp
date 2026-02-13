@@ -39,6 +39,10 @@ export class AuditLogger {
     this.serviceVersion = options.serviceVersion;
   }
 
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
   log(event: AuditEvent): Promise<void> {
     if (!this.enabled) {
       return Promise.resolve();

@@ -44,6 +44,9 @@ describe('createMcpServer', () => {
         toolMaxCallsPerWindow: 1000,
         toolRateWindowMs: 60_000
       },
+      auth: {
+        mode: 'none'
+      },
       auditLogger: createTestAuditLogger()
     });
     const client = new Client({ name: 'test-client', version: '1.0.0' });
@@ -59,6 +62,7 @@ describe('createMcpServer', () => {
 
     expect(toolNames).toContain('system.health');
     expect(toolNames).toContain('system.guard_metrics');
+    expect(toolNames).toContain('system.runtime_config');
     expect(toolNames).toContain('dev.echo');
     expect(toolNames).toContain('time.now');
     expect(toolNames).toContain('sandbox.initialize');
@@ -78,6 +82,21 @@ describe('createMcpServer', () => {
     expect(result.structuredContent).toEqual({
       message: 'HELLO MCP',
       length: 9
+    });
+
+    const runtimeConfig = await client.callTool({
+      name: 'system.runtime_config'
+    });
+    expect(runtimeConfig.isError).not.toBe(true);
+    expect(runtimeConfig.structuredContent).toMatchObject({
+      dynamic: {
+        backend: 'file',
+        adminTokenConfigured: false
+      },
+      auth: {
+        mode: 'none',
+        jwtConfigured: false
+      }
     });
   });
 });

@@ -24,6 +24,7 @@ async function main(): Promise<void> {
       dynamic: config.dynamic,
       sandbox: config.sandbox,
       security: config.security,
+      auth: config.auth,
       auditLogger
     });
     installShutdownHandlers(async () => {

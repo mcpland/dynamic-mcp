@@ -146,6 +146,9 @@ function buildServerConfig(storeRoot: string) {
       toolMaxCallsPerWindow: 1000,
       toolRateWindowMs: 60_000
     },
+    auth: {
+      mode: 'none'
+    },
     auditLogger: createTestAuditLogger()
   };
 }

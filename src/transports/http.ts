@@ -126,6 +126,7 @@ export async function startHttpTransport(
       dynamic: options.dynamic,
       sandbox: options.sandbox,
       security: options.security,
+      auth: options.auth,
       auditLogger: options.auditLogger
     });
     const transport = new StreamableHTTPServerTransport({
