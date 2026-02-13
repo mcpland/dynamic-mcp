@@ -68,6 +68,9 @@ describe('http transport health probes', () => {
     });
     expect(live.status).toBe(200);
     expect(live.headers.get('x-request-id')).toBe('req-live-1');
+    expect(live.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(live.headers.get('x-frame-options')).toBe('DENY');
+    expect(live.headers.get('referrer-policy')).toBe('no-referrer');
     await expect(live.json()).resolves.toMatchObject({ status: 'ok' });
 
     const ready = await fetch(`http://127.0.0.1:${port}/readyz`);

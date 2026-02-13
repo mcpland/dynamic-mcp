@@ -38,6 +38,7 @@ A production-oriented **dynamic MCP server** in Node.js, with secure Docker sand
 - Optional admin token (`MCP_ADMIN_TOKEN`) for dangerous operations.
 - Allowlist/denylist controls for images and npm packages.
 - Runtime guard for anti-abuse throttling.
+- Hardened HTTP response headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`).
 - Optional JWT auth in HTTP mode (JWKS/issuer/audience/scope).
 - Structured JSONL audit logging for privileged/runtime actions.
 - Structured JSONL audit logging with shutdown flush guarantees.
