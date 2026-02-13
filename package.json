@@ -11,6 +11,13 @@
   "bin": {
     "dynamic-mcp": "./dist/index.js"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mcpland/dynamic-mcp.git"
+  },
   "scripts": {
     "dev": "tsx src/index.ts",
     "dev:mvp": "tsx src/index.ts --profile mvp",
