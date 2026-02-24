@@ -87,8 +87,6 @@ describe('retryAsync', () => {
   });
 
   it('applies exponential backoff delay', async () => {
-    const delays: number[] = [];
-    const originalSetTimeout = globalThis.setTimeout;
     vi.useFakeTimers();
 
     let attempt = 0;

@@ -95,6 +95,7 @@ describe('createMcpServer', () => {
       dynamic: {
         backend: 'file',
         readOnly: false,
+        requireAdminToken: false,
         adminTokenConfigured: false
       },
       auth: {
@@ -165,6 +166,22 @@ describe('createMcpServer', () => {
       status: 'ok',
       service: 'dynamic-mcp'
     });
+  });
+
+  it('rejects startup when requireAdminToken is enabled without token', async () => {
+    const storeRoot = await mkdtemp(join(tmpdir(), 'dynamic-mcp-server-admin-required-'));
+    await expect(
+      createMcpServer({
+        ...buildEnterpriseConfig(storeRoot),
+        dynamic: {
+          backend: 'file',
+          storeFilePath: join(storeRoot, 'tools.json'),
+          maxTools: 32,
+          readOnly: false,
+          requireAdminToken: true
+        }
+      })
+    ).rejects.toThrow(/MCP_ADMIN_TOKEN/);
   });
 
   it('time.now returns valid time for default UTC', async () => {

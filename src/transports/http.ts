@@ -6,12 +6,14 @@ import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
-import type { Request, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 
 import { JwtAuthVerifier } from '../auth/jwt.js';
 import type { AuditLogger } from '../audit/logger.js';
+import { shutdownPostgresRegistryChangeListeners } from '../dynamic/postgres-change-sync.js';
 import { closeAllSharedPostgresPools, getSharedPostgresPool } from '../dynamic/postgres-pool.js';
 import { createMcpServer } from '../server/create-server.js';
+import { shutdownSandboxRuntime } from '../sandbox/register-session-tools.js';
 import {
   sessionSweepIntervalMs,
   staleSessionIds,
@@ -37,6 +39,7 @@ interface HttpServerOptions {
     storeFilePath: string;
     maxTools: number;
     readOnly: boolean;
+    requireAdminToken?: boolean;
     adminToken?: string;
     postgres?: {
       connectionString: string;
@@ -329,6 +332,47 @@ export async function startHttpTransport(
   app.post(config.path, postHandler);
   app.get(config.path, getHandler);
   app.delete(config.path, deleteHandler);
+  app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) {
+      next(error);
+      return;
+    }
+
+    const requestId = resolveRequestId(req, res);
+    const errLike = error as {
+      type?: string;
+      status?: number;
+      statusCode?: number;
+      body?: unknown;
+      message?: string;
+    };
+
+    if (
+      errLike.type === 'entity.too.large' ||
+      errLike.status === 413 ||
+      errLike.statusCode === 413
+    ) {
+      sendJsonRpcError(
+        res,
+        413,
+        -32013,
+        `Request body too large. Max allowed bytes: ${config.maxRequestBytes}.`,
+        undefined,
+        requestId
+      );
+      return;
+    }
+
+    if (
+      error instanceof SyntaxError &&
+      (errLike.body !== undefined || errLike.status === 400 || errLike.statusCode === 400)
+    ) {
+      sendJsonRpcError(res, 400, -32700, 'Parse error: Invalid JSON.', undefined, requestId);
+      return;
+    }
+
+    next(error);
+  });
   app.get('/livez', (req, res) => {
     resolveRequestId(req, res);
     res.status(200).json({
@@ -373,7 +417,9 @@ export async function startHttpTransport(
       }
 
       clearInterval(sweepTimer);
+      await shutdownSandboxRuntime(options.sandbox.dockerBinary);
       await closeServer(httpServer);
+      await shutdownPostgresRegistryChangeListeners();
       await closeAllSharedPostgresPools();
     }
   };

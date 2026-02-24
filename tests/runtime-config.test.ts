@@ -12,11 +12,12 @@ describe('loadRuntimeConfig', () => {
     expect(config.http.port).toBe(8788);
     expect(config.http.path).toBe('/mcp');
     expect(config.http.sessionTtlSeconds).toBe(1800);
-    expect(config.http.maxRequestBytes).toBe(1_000_000);
+    expect(config.http.maxRequestBytes).toBe(102_400);
     expect(config.dynamic.backend).toBe('file');
     expect(config.dynamic.storeFilePath.endsWith('.dynamic-mcp/tools.json')).toBe(true);
     expect(config.dynamic.maxTools).toBe(256);
     expect(config.dynamic.readOnly).toBe(false);
+    expect(config.dynamic.requireAdminToken).toBe(false);
     expect(config.sandbox.memoryLimit).toBe('512m');
     expect(config.sandbox.allowedImages).toEqual(['node:lts-slim']);
     expect(config.sandbox.sessionTimeoutSeconds).toBe(1800);
@@ -61,6 +62,7 @@ describe('loadRuntimeConfig', () => {
     expect(config.dynamic.backend).toBe('file');
     expect(config.dynamic.maxTools).toBe(12);
     expect(config.dynamic.readOnly).toBe(false);
+    expect(config.dynamic.requireAdminToken).toBe(false);
     expect(config.dynamic.adminToken).toBe('secret-token');
     expect(config.sandbox.allowedImages).toEqual(['node:lts-slim', 'node:22-alpine']);
     expect(config.audit.enabled).toBe(true);
@@ -138,6 +140,58 @@ describe('loadRuntimeConfig', () => {
   it('loads dynamic read-only mode', () => {
     const config = loadRuntimeConfig(['--dynamic-read-only', 'true'], {});
     expect(config.dynamic.readOnly).toBe(true);
+  });
+
+  it('requires MCP_ADMIN_TOKEN when require-admin-token is enabled', () => {
+    expect(() => loadRuntimeConfig(['--require-admin-token', 'true'], {})).toThrow(
+      /MCP_ADMIN_TOKEN/
+    );
+  });
+
+  it('enables admin-token requirement by default for enterprise http jwt mode', () => {
+    expect(() =>
+      loadRuntimeConfig(
+        [
+          '--profile',
+          'enterprise',
+          '--transport',
+          'http',
+          '--auth-mode',
+          'jwt',
+          '--auth-jwks-url',
+          'https://issuer/jwks',
+          '--auth-issuer',
+          'https://issuer',
+          '--auth-audience',
+          'dynamic-mcp'
+        ],
+        {}
+      )
+    ).toThrow(/MCP_ADMIN_TOKEN/);
+  });
+
+  it('allows disabling admin-token requirement explicitly', () => {
+    const config = loadRuntimeConfig(
+      [
+        '--profile',
+        'enterprise',
+        '--transport',
+        'http',
+        '--auth-mode',
+        'jwt',
+        '--auth-jwks-url',
+        'https://issuer/jwks',
+        '--auth-issuer',
+        'https://issuer',
+        '--auth-audience',
+        'dynamic-mcp',
+        '--require-admin-token',
+        'false'
+      ],
+      {}
+    );
+
+    expect(config.dynamic.requireAdminToken).toBe(false);
   });
 
   it('loads audit rotation config values', () => {

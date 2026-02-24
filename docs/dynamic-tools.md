@@ -119,14 +119,17 @@ return { sum, avg, median, count: numbers.length };
 
 ```
 dynamic.tool.create → validates schema → persists to registry → registers as MCP tool → notifies clients
+                 → [postgres backend] emits LISTEN/NOTIFY event for other instances
 ```
 
 After creation, the tool is immediately available for invocation.
+In HTTP mode, tool mutations are propagated across active sessions in the same server process.
 
 ### Update
 
 ```
 dynamic.tool.update → validates patch → updates registry → re-registers MCP tool → notifies clients
+                 → [postgres backend] emits LISTEN/NOTIFY event for other instances
 ```
 
 Use `expectedRevision` for safe concurrent updates:
@@ -202,8 +205,10 @@ If no marker is found in stdout, the raw output is returned as text.
 
 ### Network Access
 
-- **No dependencies:** Container runs with `--network none` (no network access)
-- **With dependencies:** Container uses `--network bridge` (network access for npm install, also available to tool code)
+- **No dependencies:** Execution runs with `--network none`.
+- **With dependencies:** Runtime is split into two phases:
+  - Dependency install phase uses `--network bridge`.
+  - Tool execution phase uses `--network none`.
 
 ### Limits
 
@@ -227,6 +232,8 @@ If no marker is found in stdout, the raw output is returned as text.
 ## Admin Token
 
 When `MCP_ADMIN_TOKEN` is set, all `dynamic.tool.*` operations require the `adminToken` field to match. This prevents unauthorized tool modification.
+
+Set `MCP_REQUIRE_ADMIN_TOKEN=true` to fail startup when `MCP_ADMIN_TOKEN` is missing.
 
 ## Read-Only Mode
 

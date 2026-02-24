@@ -1,7 +1,5 @@
+import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -12,6 +10,8 @@ import type { DynamicToolRecord } from './spec.js';
 const execFileAsync = promisify(execFile);
 const resultMarker = '__DYNAMIC_TOOL_RESULT__';
 const dockerImageRegex = /^[a-zA-Z0-9][a-zA-Z0-9_.:/-]{0,199}$/;
+const workspaceTmpfsMount = '/workspace:rw,exec,nosuid,size=256m';
+const workspaceVolumePrefix = 'dynamic-mcp-tool-';
 
 export interface DockerDynamicExecutionOptions {
   dockerBinary: string;
@@ -34,7 +34,6 @@ export class DockerDynamicToolExecutionEngine implements DynamicToolExecutionEng
   }
 
   async execute(tool: DynamicToolRecord, args: Record<string, unknown>): Promise<CallToolResult> {
-    const workspace = await mkdtemp(join(tmpdir(), 'dynamic-mcp-tool-'));
     const startedAt = Date.now();
 
     try {
@@ -44,59 +43,95 @@ export class DockerDynamicToolExecutionEngine implements DynamicToolExecutionEng
       const dependencies = Object.fromEntries(
         tool.dependencies.map((dependency) => [dependency.name, dependency.version])
       );
-
-      await writeFile(join(workspace, 'tool.mjs'), renderToolModule(tool.code), 'utf8');
-      await writeFile(join(workspace, 'runner.mjs'), renderRunnerModule(), 'utf8');
-      await writeFile(
-        join(workspace, 'package.json'),
-        `${JSON.stringify({ type: 'module', dependencies }, null, 2)}\n`,
-        'utf8'
-      );
-
-      const command =
-        tool.dependencies.length > 0
-          ? 'npm install --omit=dev --ignore-scripts --no-audit --fund=false --loglevel=error && node runner.mjs'
-          : 'node runner.mjs';
-
+      const toolModule = renderToolModule(tool.code);
+      const runnerModule = renderRunnerModule();
+      const packageManifest = `${JSON.stringify({ type: 'module', dependencies }, null, 2)}\n`;
       const timeout = Math.min(tool.timeoutMs, this.options.maxTimeoutMs);
       const argsB64 = Buffer.from(JSON.stringify(args), 'utf8').toString('base64');
+      const toolB64 = Buffer.from(toolModule, 'utf8').toString('base64');
+      const runnerB64 = Buffer.from(runnerModule, 'utf8').toString('base64');
+      const packageB64 = Buffer.from(packageManifest, 'utf8').toString('base64');
+      const hasDependencies = tool.dependencies.length > 0;
 
-      const dockerArgs = [
-        'run',
-        '--rm',
-        '--read-only',
-        '--tmpfs',
-        '/tmp:rw,noexec,nosuid,size=64m',
-        '--security-opt',
-        'no-new-privileges',
-        '--cap-drop',
-        'ALL',
-        '--pids-limit',
-        '256',
-        '--memory',
-        this.options.memoryLimit,
-        '--cpus',
-        this.options.cpuLimit,
-        '--network',
-        tool.dependencies.length > 0 ? 'bridge' : 'none',
-        '--workdir',
-        '/workspace',
-        '--volume',
-        `${workspace}:/workspace`,
-        '--user',
-        'node',
-        '--env',
-        `MCP_DYNAMIC_ARGS_B64=${argsB64}`,
-        tool.image,
-        '/bin/sh',
-        '-lc',
-        command
-      ];
+      let stdout = '';
+      let stderr = '';
+      if (!hasDependencies) {
+        const dockerArgs = buildDockerRunArgs({
+          memoryLimit: this.options.memoryLimit,
+          cpuLimit: this.options.cpuLimit,
+          networkMode: 'none',
+          runAsUser: 'node',
+          mountArgs: ['--tmpfs', workspaceTmpfsMount],
+          envArgs: [
+            '--env',
+            `MCP_DYNAMIC_ARGS_B64=${argsB64}`,
+            '--env',
+            `MCP_DYNAMIC_TOOL_B64=${toolB64}`,
+            '--env',
+            `MCP_DYNAMIC_RUNNER_B64=${runnerB64}`,
+            '--env',
+            `MCP_DYNAMIC_PACKAGE_B64=${packageB64}`
+          ],
+          image: tool.image,
+          command: buildWorkspaceBootstrapCommand({ installDependencies: false })
+        });
 
-      const { stdout, stderr } = await execFileAsync(this.options.dockerBinary, dockerArgs, {
-        timeout,
-        maxBuffer: Math.max(this.options.maxOutputBytes * 3, 1_000_000)
-      });
+        ({ stdout, stderr } = await execFileAsync(this.options.dockerBinary, dockerArgs, {
+          timeout,
+          maxBuffer: Math.max(this.options.maxOutputBytes * 3, 1_000_000)
+        }));
+      } else {
+        const workspaceVolumeName = `${workspaceVolumePrefix}${randomUUID()}`;
+        try {
+          await execFileAsync(this.options.dockerBinary, ['volume', 'create', workspaceVolumeName], {
+            timeout: 10_000,
+            maxBuffer: 200_000
+          });
+
+          const installArgs = buildDockerRunArgs({
+            memoryLimit: this.options.memoryLimit,
+            cpuLimit: this.options.cpuLimit,
+            networkMode: 'bridge',
+            mountArgs: ['--mount', `type=volume,src=${workspaceVolumeName},dst=/workspace`],
+            envArgs: [
+              '--env',
+              `MCP_DYNAMIC_TOOL_B64=${toolB64}`,
+              '--env',
+              `MCP_DYNAMIC_RUNNER_B64=${runnerB64}`,
+              '--env',
+              `MCP_DYNAMIC_PACKAGE_B64=${packageB64}`
+            ],
+            image: tool.image,
+            command: buildWorkspaceBootstrapCommand({ installDependencies: true })
+          });
+
+          await execFileAsync(this.options.dockerBinary, installArgs, {
+            timeout,
+            maxBuffer: Math.max(this.options.maxOutputBytes * 2, 1_000_000)
+          });
+
+          const runArgs = buildDockerRunArgs({
+            memoryLimit: this.options.memoryLimit,
+            cpuLimit: this.options.cpuLimit,
+            networkMode: 'none',
+            runAsUser: 'node',
+            mountArgs: [
+              '--mount',
+              `type=volume,src=${workspaceVolumeName},dst=/workspace,readonly`
+            ],
+            envArgs: ['--env', `MCP_DYNAMIC_ARGS_B64=${argsB64}`],
+            image: tool.image,
+            command: 'node /workspace/runner.mjs'
+          });
+
+          ({ stdout, stderr } = await execFileAsync(this.options.dockerBinary, runArgs, {
+            timeout,
+            maxBuffer: Math.max(this.options.maxOutputBytes * 3, 1_000_000)
+          }));
+        } finally {
+          await removeDockerVolume(this.options.dockerBinary, workspaceVolumeName);
+        }
+      }
 
       const output = `${stdout ?? ''}${stderr ? `\n${stderr}` : ''}`.trim();
       const truncatedOutput = clipText(output, this.options.maxOutputBytes);
@@ -160,8 +195,6 @@ export class DockerDynamicToolExecutionEngine implements DynamicToolExecutionEng
           }
         ]
       };
-    } finally {
-      await rm(workspace, { recursive: true, force: true });
     }
   }
 
@@ -214,6 +247,23 @@ export class DockerDynamicToolExecutionEngine implements DynamicToolExecutionEng
 
 function renderToolModule(code: string): string {
   return `export async function run(args) {\n${code}\n}\n`;
+}
+
+function buildWorkspaceBootstrapCommand(options: { installDependencies: boolean }): string {
+  const lines = [
+    'set -eu',
+    "printf '%s' \"$MCP_DYNAMIC_TOOL_B64\" | base64 -d > /workspace/tool.mjs",
+    "printf '%s' \"$MCP_DYNAMIC_RUNNER_B64\" | base64 -d > /workspace/runner.mjs",
+    "printf '%s' \"$MCP_DYNAMIC_PACKAGE_B64\" | base64 -d > /workspace/package.json"
+  ];
+
+  if (options.installDependencies) {
+    lines.push('npm install --omit=dev --ignore-scripts --no-audit --fund=false --loglevel=error');
+  } else {
+    lines.push('node /workspace/runner.mjs');
+  }
+
+  return lines.join('\n');
 }
 
 function renderRunnerModule(): string {
@@ -326,4 +376,55 @@ function clipText(text: string, maxBytes: number): string {
 
   const buffer = Buffer.from(text, 'utf8');
   return `${buffer.subarray(0, maxBytes).toString('utf8')}\n...<truncated>`;
+}
+
+function buildDockerRunArgs(input: {
+  memoryLimit: string;
+  cpuLimit: string;
+  networkMode: 'none' | 'bridge';
+  mountArgs: string[];
+  envArgs: string[];
+  image: string;
+  command: string;
+  runAsUser?: string;
+}): string[] {
+  return [
+    'run',
+    '--rm',
+    '--read-only',
+    '--tmpfs',
+    '/tmp:rw,noexec,nosuid,size=64m',
+    '--security-opt',
+    'no-new-privileges',
+    '--cap-drop',
+    'ALL',
+    '--pids-limit',
+    '256',
+    '--memory',
+    input.memoryLimit,
+    '--cpus',
+    input.cpuLimit,
+    '--network',
+    input.networkMode,
+    '--workdir',
+    '/workspace',
+    ...(input.runAsUser ? ['--user', input.runAsUser] : []),
+    ...input.mountArgs,
+    ...input.envArgs,
+    input.image,
+    '/bin/sh',
+    '-lc',
+    input.command
+  ];
+}
+
+async function removeDockerVolume(dockerBinary: string, volumeName: string): Promise<void> {
+  try {
+    await execFileAsync(dockerBinary, ['volume', 'rm', '-f', volumeName], {
+      timeout: 10_000,
+      maxBuffer: 200_000
+    });
+  } catch {
+    // Ignore best-effort cleanup failures.
+  }
 }

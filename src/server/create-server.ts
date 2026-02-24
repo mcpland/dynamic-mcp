@@ -3,6 +3,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { DockerDynamicToolExecutionEngine } from '../dynamic/docker-executor.js';
+import { ensurePostgresRegistryChangeListener } from '../dynamic/postgres-change-sync.js';
 import { getSharedPostgresPool } from '../dynamic/postgres-pool.js';
 import { PostgresDynamicToolRegistry } from '../dynamic/postgres-registry.js';
 import { DynamicToolRegistry } from '../dynamic/registry.js';
@@ -12,8 +13,7 @@ import { DynamicDependencySchema, type DynamicToolRecord } from '../dynamic/spec
 import { registerSessionSandboxTools } from '../sandbox/register-session-tools.js';
 import { ToolExecutionGuard } from '../security/guard.js';
 import type { AuditLogger } from '../audit/logger.js';
-
-const serviceVersion = '0.2.0';
+import { serviceVersion } from '../version.js';
 
 const HealthOutputSchema = z.object({
   status: z.literal('ok'),
@@ -48,6 +48,7 @@ const RuntimeConfigOutputSchema = z.object({
     backend: z.enum(['file', 'postgres']),
     maxTools: z.number().int().positive(),
     readOnly: z.boolean(),
+    requireAdminToken: z.boolean(),
     adminTokenConfigured: z.boolean(),
     postgresSchema: z.string().optional(),
     postgresInitMaxAttempts: z.number().int().positive().optional(),
@@ -98,6 +99,7 @@ export interface CreateMcpServerOptions {
     storeFilePath: string;
     maxTools: number;
     readOnly: boolean;
+    requireAdminToken?: boolean;
     adminToken?: string;
     postgres?: {
       connectionString: string;
@@ -136,6 +138,12 @@ export interface CreateMcpServerOptions {
 }
 
 export async function createMcpServer(options: CreateMcpServerOptions): Promise<McpServer> {
+  if (options.dynamic.requireAdminToken && !options.dynamic.adminToken) {
+    throw new Error(
+      'Missing required config: MCP_ADMIN_TOKEN (required when MCP_REQUIRE_ADMIN_TOKEN=true).'
+    );
+  }
+
   const startedAt = Date.now();
   const runtimeConfigSnapshot = buildRuntimeConfigSnapshot(options);
 
@@ -323,7 +331,7 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
     );
   }
 
-  const registry = buildDynamicToolRegistry(options.dynamic);
+  const registry = await buildDynamicToolRegistry(options.dynamic);
 
   const executionEngine = new DockerDynamicToolExecutionEngine(options.sandbox);
   const executionGuard = new ToolExecutionGuard({
@@ -341,6 +349,17 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
     auditLogger: options.auditLogger
   });
   await dynamicService.initialize();
+  const originalServerClose = server.close.bind(server);
+  let serverClosed = false;
+  server.close = async () => {
+    if (serverClosed) {
+      return;
+    }
+
+    serverClosed = true;
+    dynamicService.dispose();
+    await originalServerClose();
+  };
 
   server.registerTool(
     'run_js_ephemeral',
@@ -477,13 +496,18 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
   return server;
 }
 
-function buildDynamicToolRegistry(
+async function buildDynamicToolRegistry(
   dynamic: CreateMcpServerOptions['dynamic']
-): DynamicToolRegistryPort {
+): Promise<DynamicToolRegistryPort> {
   if (dynamic.backend === 'postgres') {
     if (!dynamic.postgres) {
       throw new Error('Missing postgres dynamic registry config.');
     }
+
+    await ensurePostgresRegistryChangeListener(
+      dynamic.postgres.connectionString,
+      dynamic.postgres.schema
+    );
 
     return new PostgresDynamicToolRegistry({
       pool: getSharedPostgresPool(dynamic.postgres.connectionString),
@@ -518,6 +542,7 @@ function buildRuntimeConfigSnapshot(
       backend: options.dynamic.backend,
       maxTools: options.dynamic.maxTools,
       readOnly: options.dynamic.readOnly,
+      requireAdminToken: Boolean(options.dynamic.requireAdminToken),
       adminTokenConfigured: Boolean(options.dynamic.adminToken),
       ...(options.dynamic.backend === 'postgres' && options.dynamic.postgres
         ? {

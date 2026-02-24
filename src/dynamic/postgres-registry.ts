@@ -1,5 +1,6 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 
+import { emitPostgresRegistryChange } from './postgres-change-sync.js';
 import { buildCreatedRecord, buildUpdatedRecord } from './record-utils.js';
 import type { DynamicToolRegistryPort } from './registry-port.js';
 import { retryAsync } from '../lib/retry.js';
@@ -69,6 +70,10 @@ export class PostgresDynamicToolRegistry implements DynamicToolRegistryPort {
     this.loaded = true;
   }
 
+  async reload(): Promise<void> {
+    await this.load();
+  }
+
   async list(): Promise<DynamicToolRecord[]> {
     this.assertLoaded();
 
@@ -91,41 +96,58 @@ export class PostgresDynamicToolRegistry implements DynamicToolRegistryPort {
     this.assertLoaded();
 
     const normalized = DynamicToolCreateSchema.parse(input);
-    const existingCount = await this.countTools();
-    if (existingCount >= this.maxTools) {
-      throw new Error(`Dynamic tool limit reached (${this.maxTools}).`);
-    }
-
     const record = buildCreatedRecord(normalized);
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `${this.schema}.dynamic_tools.max_tools`
+      ]);
 
-    const result = await this.pool.query(
-      `
-      INSERT INTO ${this.schema}.dynamic_tools
-      (name, title, description, image, timeout_ms, dependencies, code, enabled, created_at, updated_at, revision)
-      VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9::timestamptz,$10::timestamptz,$11)
-      ON CONFLICT (name) DO NOTHING
-      RETURNING *
-      `,
-      [
-        record.name,
-        record.title ?? null,
-        record.description,
-        record.image,
-        record.timeoutMs,
-        JSON.stringify(record.dependencies),
-        record.code,
-        record.enabled,
-        record.createdAt,
-        record.updatedAt,
-        record.revision
-      ]
-    );
+      const existingCountResult = await client.query(
+        `SELECT COUNT(*)::integer AS count FROM ${this.schema}.dynamic_tools`
+      );
+      const existingCount = Number(existingCountResult.rows[0]?.count ?? 0);
+      if (existingCount >= this.maxTools) {
+        throw new Error(`Dynamic tool limit reached (${this.maxTools}).`);
+      }
 
-    if ((result.rowCount ?? 0) !== 1) {
-      throw new Error(`Dynamic tool already exists: ${record.name}`);
+      const result = await client.query(
+        `
+        INSERT INTO ${this.schema}.dynamic_tools
+        (name, title, description, image, timeout_ms, dependencies, code, enabled, created_at, updated_at, revision)
+        VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9::timestamptz,$10::timestamptz,$11)
+        ON CONFLICT (name) DO NOTHING
+        RETURNING *
+        `,
+        [
+          record.name,
+          record.title ?? null,
+          record.description,
+          record.image,
+          record.timeoutMs,
+          JSON.stringify(record.dependencies),
+          record.code,
+          record.enabled,
+          record.createdAt,
+          record.updatedAt,
+          record.revision
+        ]
+      );
+
+      if ((result.rowCount ?? 0) !== 1) {
+        throw new Error(`Dynamic tool already exists: ${record.name}`);
+      }
+
+      await client.query('COMMIT');
+      void emitPostgresRegistryChange(this.pool, this.schema, 'create', record.name);
+      return rowToRecord(result.rows[0]);
+    } catch (error) {
+      await rollbackQuietly(client);
+      throw error;
+    } finally {
+      client.release();
     }
-
-    return rowToRecord(result.rows[0]);
   }
 
   async update(
@@ -178,6 +200,7 @@ export class PostgresDynamicToolRegistry implements DynamicToolRegistryPort {
       throw await buildRevisionConflictOrNotFound(this.pool, this.schema, name, existing.revision);
     }
 
+    void emitPostgresRegistryChange(this.pool, this.schema, 'update', name);
     return updated;
   }
 
@@ -198,6 +221,7 @@ export class PostgresDynamicToolRegistry implements DynamicToolRegistryPort {
       throw await buildRevisionConflictOrNotFound(this.pool, this.schema, name, existing.revision);
     }
 
+    void emitPostgresRegistryChange(this.pool, this.schema, 'delete', name);
     return (result.rowCount ?? 0) > 0;
   }
 
@@ -207,11 +231,6 @@ export class PostgresDynamicToolRegistry implements DynamicToolRegistryPort {
     expectedRevision?: number
   ): Promise<DynamicToolRecord> {
     return this.update(name, { enabled }, expectedRevision);
-  }
-
-  private async countTools(): Promise<number> {
-    const result = await this.pool.query(`SELECT COUNT(*)::integer AS count FROM ${this.schema}.dynamic_tools`);
-    return Number(result.rows[0]?.count ?? 0);
   }
 
   private assertLoaded(): void {
@@ -290,6 +309,14 @@ async function buildRevisionConflictOrNotFound(
   }
 
   return new Error(`Revision conflict for dynamic tool "${name}".`);
+}
+
+async function rollbackQuietly(client: PoolClient): Promise<void> {
+  try {
+    await client.query('ROLLBACK');
+  } catch {
+    // Ignore rollback errors after a failed statement.
+  }
 }
 
 function isRetriablePgInitError(error: unknown): boolean {

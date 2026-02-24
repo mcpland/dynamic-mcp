@@ -250,6 +250,69 @@ describe('http transport health probes', () => {
     };
     expect(body.error?.message).toMatch(/too large/i);
   });
+
+  it('returns JSON-RPC parse error for malformed JSON payloads', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dynamic-mcp-http-json-parse-'));
+    const port = await getFreePort();
+    const handle = await startHttpTransport(
+      {
+        host: '127.0.0.1',
+        port,
+        path: '/mcp',
+        sessionTtlSeconds: 1800,
+        maxRequestBytes: 102_400
+      },
+      {
+        profile: 'mvp',
+        dynamic: {
+          backend: 'file',
+          storeFilePath: join(root, 'tools.json'),
+          maxTools: 16,
+          readOnly: false
+        },
+        sandbox: {
+          dockerBinary: 'docker',
+          memoryLimit: '512m',
+          cpuLimit: '1',
+          maxDependencies: 8,
+          maxOutputBytes: 200_000,
+          maxTimeoutMs: 60_000,
+          allowedImages: ['node:lts-slim'],
+          blockedPackages: [],
+          sessionTimeoutSeconds: 1_800,
+          maxSessions: 20
+        },
+        security: {
+          toolMaxConcurrency: 8,
+          toolMaxCallsPerWindow: 1000,
+          toolRateWindowMs: 60_000
+        },
+        auth: {
+          mode: 'none'
+        },
+        auditLogger: createTestAuditLogger()
+      }
+    );
+    openHandles.push(handle);
+
+    const response = await fetch(`http://127.0.0.1:${port}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: '{"jsonrpc":"2.0","id":1,"method":"ping",'
+    });
+
+    expect(response.status).toBe(400);
+    const payload = (await response.json()) as {
+      error?: {
+        code?: number;
+        message?: string;
+      };
+    };
+    expect(payload.error?.code).toBe(-32700);
+    expect(payload.error?.message).toMatch(/parse error/i);
+  });
 });
 
 function createTestAuditLogger(): AuditLogger {

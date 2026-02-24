@@ -28,7 +28,7 @@ Used when `MCP_TRANSPORT=http`.
 | `MCP_PORT` / `PORT` | `--port` | `8788` | HTTP listen port (1–65535) |
 | `MCP_PATH` | `--path` | `/mcp` | MCP endpoint path |
 | `MCP_HTTP_SESSION_TTL_SECONDS` | `--http-session-ttl-seconds` | `1800` | Session idle timeout in seconds (max 604800) |
-| `MCP_HTTP_MAX_REQUEST_BYTES` | `--http-max-request-bytes` | `1000000` | Maximum request body size in bytes (max 100000000) |
+| `MCP_HTTP_MAX_REQUEST_BYTES` | `--http-max-request-bytes` | `102400` | Maximum request body size in bytes (max 102400) |
 
 ### HTTP Endpoints
 
@@ -66,7 +66,10 @@ Available at `GET /metrics`:
 | `MCP_DYNAMIC_STORE` | `--dynamic-store` | `.dynamic-mcp/tools.json` | File path for the file-based registry |
 | `MCP_DYNAMIC_MAX_TOOLS` | `--dynamic-max-tools` | `256` | Maximum number of stored tools (1–10000) |
 | `MCP_DYNAMIC_READ_ONLY` | `--dynamic-read-only` | `false` | Disable tool creation/update/delete when `true` |
+| `MCP_REQUIRE_ADMIN_TOKEN` | `--require-admin-token` | `false`* | Require `MCP_ADMIN_TOKEN` at startup |
 | `MCP_ADMIN_TOKEN` | `--admin-token` | *(none)* | Admin token required for privileged operations |
+
+\* Defaults to `true` when `MCP_PROFILE=enterprise`, `MCP_TRANSPORT=http`, and `MCP_AUTH_MODE=jwt`; otherwise defaults to `false`.
 
 ### PostgreSQL Backend
 

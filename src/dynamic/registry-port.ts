@@ -2,6 +2,7 @@ import type { DynamicToolCreate, DynamicToolRecord, DynamicToolUpdate } from './
 
 export interface DynamicToolRegistryPort {
   load(): Promise<void>;
+  reload(): Promise<void>;
   list(): Promise<DynamicToolRecord[]>;
   get(name: string): Promise<DynamicToolRecord | null>;
   create(input: DynamicToolCreate): Promise<DynamicToolRecord>;

@@ -1,8 +1,14 @@
+import { randomUUID } from 'node:crypto';
+
 import type { McpServer, RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import type { DynamicToolExecutionEngine } from './executor.js';
+import {
+  publishDynamicRegistryChange,
+  subscribeDynamicRegistryChanges
+} from './change-bus.js';
 import type { DynamicToolRegistryPort } from './registry-port.js';
 import {
   DynamicToolCreateSchema,
@@ -69,6 +75,7 @@ export interface DynamicToolServiceOptions {
 }
 
 export class DynamicToolService {
+  private readonly serviceId = randomUUID();
   private readonly server: McpServer;
   private readonly registry: DynamicToolRegistryPort;
   private readonly executionEngine: DynamicToolExecutionEngine;
@@ -77,6 +84,10 @@ export class DynamicToolService {
   private readonly adminToken?: string;
   private readonly readOnly: boolean;
   private readonly runtimeToolHandles = new Map<string, RegisteredTool>();
+  private readonly runtimeToolRevisions = new Map<string, number>();
+  private unsubscribeRegistryChanges?: () => void;
+  private syncInFlight = false;
+  private syncPending = false;
 
   constructor(options: DynamicToolServiceOptions) {
     this.server = options.server;
@@ -92,6 +103,24 @@ export class DynamicToolService {
     await this.registry.load();
     await this.refreshAllRuntimeTools();
     this.registerManagementTools();
+    this.unsubscribeRegistryChanges = subscribeDynamicRegistryChanges((event) => {
+      if (event.originId === this.serviceId) {
+        return;
+      }
+
+      this.scheduleRegistryRefresh();
+    });
+  }
+
+  dispose(): void {
+    if (this.unsubscribeRegistryChanges) {
+      this.unsubscribeRegistryChanges();
+      this.unsubscribeRegistryChanges = undefined;
+    }
+
+    for (const name of [...this.runtimeToolHandles.keys()]) {
+      this.removeRuntimeTool(name);
+    }
   }
 
   private registerManagementTools(): void {
@@ -173,6 +202,7 @@ export class DynamicToolService {
             const created = await this.registry.create(tool);
             await this.applyRuntimeTool(created);
             this.server.sendToolListChanged();
+            this.broadcastRegistryChange('create', created.name);
             void this.auditLogger?.log({
               action: 'dynamic.tool.create',
               actor: 'admin',
@@ -211,6 +241,7 @@ export class DynamicToolService {
             const updated = await this.registry.update(name, patch, expectedRevision);
             await this.applyRuntimeTool(updated);
             this.server.sendToolListChanged();
+            this.broadcastRegistryChange('update', updated.name);
             void this.auditLogger?.log({
               action: 'dynamic.tool.update',
               actor: 'admin',
@@ -257,6 +288,7 @@ export class DynamicToolService {
               };
             }
 
+            this.broadcastRegistryChange('delete', name);
             void this.auditLogger?.log({
               action: 'dynamic.tool.delete',
               actor: 'admin',
@@ -291,6 +323,7 @@ export class DynamicToolService {
             const updated = await this.registry.setEnabled(name, enabled, expectedRevision);
             await this.applyRuntimeTool(updated);
             this.server.sendToolListChanged();
+            this.broadcastRegistryChange(enabled ? 'enable' : 'disable', name);
             void this.auditLogger?.log({
               action: enabled ? 'dynamic.tool.enable' : 'dynamic.tool.disable',
               actor: 'admin',
@@ -314,17 +347,27 @@ export class DynamicToolService {
 
   private async refreshAllRuntimeTools(): Promise<void> {
     const records = await this.registry.list();
-    for (const record of records) {
-      await this.applyRuntimeTool(record);
-    }
+    await this.syncRuntimeTools(records);
   }
 
-  private async applyRuntimeTool(record: DynamicToolRecord): Promise<void> {
-    this.removeRuntimeTool(record.name);
+  private async applyRuntimeTool(record: DynamicToolRecord): Promise<boolean> {
+    const existingRevision = this.runtimeToolRevisions.get(record.name);
+    const hasRegisteredHandle = this.runtimeToolHandles.has(record.name);
 
     if (!record.enabled) {
-      return;
+      if (!hasRegisteredHandle) {
+        return false;
+      }
+
+      this.removeRuntimeTool(record.name);
+      return true;
     }
+
+    if (hasRegisteredHandle && existingRevision === record.revision) {
+      return false;
+    }
+
+    this.removeRuntimeTool(record.name);
 
     const handle = this.server.registerTool(
       record.name,
@@ -341,6 +384,8 @@ export class DynamicToolService {
     );
 
     this.runtimeToolHandles.set(record.name, handle);
+    this.runtimeToolRevisions.set(record.name, record.revision);
+    return true;
   }
 
   private removeRuntimeTool(name: string): void {
@@ -349,6 +394,77 @@ export class DynamicToolService {
       existing.remove();
       this.runtimeToolHandles.delete(name);
     }
+
+    this.runtimeToolRevisions.delete(name);
+  }
+
+  private async syncRuntimeTools(records: DynamicToolRecord[]): Promise<boolean> {
+    let changed = false;
+    const knownNames = new Set(records.map((record) => record.name));
+
+    for (const existingName of [...this.runtimeToolHandles.keys()]) {
+      if (!knownNames.has(existingName)) {
+        this.removeRuntimeTool(existingName);
+        changed = true;
+      }
+    }
+
+    for (const record of records) {
+      const recordChanged = await this.applyRuntimeTool(record);
+      changed = changed || recordChanged;
+    }
+
+    return changed;
+  }
+
+  private scheduleRegistryRefresh(): void {
+    if (this.syncInFlight) {
+      this.syncPending = true;
+      return;
+    }
+
+    this.syncInFlight = true;
+    void this.runRegistryRefreshLoop();
+  }
+
+  private async runRegistryRefreshLoop(): Promise<void> {
+    while (true) {
+      this.syncPending = false;
+
+      try {
+        await this.registry.reload();
+        const changed = await this.syncRuntimeTools(await this.registry.list());
+        if (changed) {
+          this.server.sendToolListChanged();
+        }
+      } catch (error) {
+        void this.auditLogger?.log({
+          action: 'dynamic.registry.refresh',
+          actor: 'system',
+          result: 'error',
+          details: {
+            message: error instanceof Error ? error.message : String(error)
+          }
+        });
+      }
+
+      if (!this.syncPending) {
+        break;
+      }
+    }
+
+    this.syncInFlight = false;
+  }
+
+  private broadcastRegistryChange(
+    action: 'create' | 'update' | 'delete' | 'enable' | 'disable',
+    target: string
+  ): void {
+    publishDynamicRegistryChange({
+      originId: this.serviceId,
+      action,
+      target
+    });
   }
 
   private assertAdmin(providedToken: string | undefined): void {

@@ -300,6 +300,61 @@ describe('HTTP MCP session lifecycle', () => {
     expect(toolsAfter.tools.some((t) => t.name === 'dynamic.http_tool')).toBe(false);
   });
 
+  it('propagates dynamic tool changes across active HTTP sessions', async () => {
+    const storeRoot = await mkdtemp(join(tmpdir(), 'integ-http-cross-session-'));
+    const port = await getFreePort();
+    await startServer(storeRoot, port);
+
+    const clientA = await connectHttpClient(port);
+    const clientB = await connectHttpClient(port);
+
+    await clientA.listTools();
+    await clientB.listTools();
+
+    const toolName = 'dynamic.cross_session_sync';
+    const createResult = await clientA.callTool({
+      name: 'dynamic.tool.create',
+      arguments: {
+        tool: {
+          name: toolName,
+          description: 'Cross-session synchronization test tool',
+          code: 'return { synced: true };'
+        }
+      }
+    });
+    expect(createResult.isError).not.toBe(true);
+
+    let visibleInB = false;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const toolsB = await clientB.listTools();
+      visibleInB = toolsB.tools.some((tool) => tool.name === toolName);
+      if (visibleInB) {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect(visibleInB).toBe(true);
+
+    const deleteResult = await clientB.callTool({
+      name: 'dynamic.tool.delete',
+      arguments: { name: toolName }
+    });
+    expect(deleteResult.isError).not.toBe(true);
+
+    let removedInA = false;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const toolsA = await clientA.listTools();
+      removedInA = !toolsA.tools.some((tool) => tool.name === toolName);
+      if (removedInA) {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect(removedInA).toBe(true);
+  });
+
   it('reads resources and prompts over HTTP session', async () => {
     const storeRoot = await mkdtemp(join(tmpdir(), 'integ-http-res-'));
     const port = await getFreePort();

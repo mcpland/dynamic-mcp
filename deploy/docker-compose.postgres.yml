@@ -29,13 +29,15 @@ services:
       MCP_HOST: 0.0.0.0
       MCP_PORT: 8788
       MCP_PATH: /mcp
-      MCP_HTTP_MAX_REQUEST_BYTES: 1000000
+      MCP_HTTP_MAX_REQUEST_BYTES: 102400
 
       MCP_DYNAMIC_BACKEND: postgres
       MCP_DYNAMIC_PG_URL: postgres://dynamic_mcp:change-me@postgres:5432/dynamic_mcp
       MCP_DYNAMIC_PG_SCHEMA: dynamic_mcp
       MCP_DYNAMIC_PG_INIT_MAX_ATTEMPTS: 15
       MCP_DYNAMIC_PG_INIT_BACKOFF_MS: 1000
+      MCP_REQUIRE_ADMIN_TOKEN: true
+      MCP_ADMIN_TOKEN: change-me
 
       MCP_AUDIT_ENABLED: true
       MCP_AUDIT_FILE: /data/audit.log

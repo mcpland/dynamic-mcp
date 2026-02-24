@@ -31,27 +31,13 @@ export class DynamicToolRegistry implements DynamicToolRegistryPort {
       return;
     }
 
-    const payload = await readJsonFile<unknown>(this.filePath);
-    if (!payload) {
-      await this.persist();
-      this.loaded = true;
-      return;
-    }
+    await this.loadFromDisk();
+    this.loaded = true;
+  }
 
-    const parsed = DynamicToolStoreFileSchema.safeParse(payload);
-    if (!parsed.success) {
-      throw new Error(`Invalid dynamic tool store format: ${parsed.error.message}`);
-    }
-
-    this.records.clear();
-    for (const record of parsed.data.tools) {
-      if (this.records.has(record.name)) {
-        throw new Error(`Duplicate dynamic tool name found in store: ${record.name}`);
-      }
-
-      this.records.set(record.name, record);
-    }
-
+  async reload(): Promise<void> {
+    await this.writeChain;
+    await this.loadFromDisk();
     this.loaded = true;
   }
 
@@ -134,6 +120,28 @@ export class DynamicToolRegistry implements DynamicToolRegistryPort {
     expectedRevision?: number
   ): Promise<DynamicToolRecord> {
     return this.update(name, { enabled }, expectedRevision);
+  }
+
+  private async loadFromDisk(): Promise<void> {
+    const payload = await readJsonFile<unknown>(this.filePath);
+    if (!payload) {
+      await this.persist();
+      return;
+    }
+
+    const parsed = DynamicToolStoreFileSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw new Error(`Invalid dynamic tool store format: ${parsed.error.message}`);
+    }
+
+    this.records.clear();
+    for (const record of parsed.data.tools) {
+      if (this.records.has(record.name)) {
+        throw new Error(`Duplicate dynamic tool name found in store: ${record.name}`);
+      }
+
+      this.records.set(record.name, record);
+    }
   }
 
   private assertLoaded(): void {

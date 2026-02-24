@@ -20,10 +20,11 @@ Start from [`.env.prod.example`](../.env.prod.example).
 2. Confirm PostgreSQL connectivity and credentials.
 3. Confirm JWT settings are valid: `MCP_AUTH_JWKS_URL`, `MCP_AUTH_ISSUER`, `MCP_AUTH_AUDIENCE`.
 4. Confirm required scopes are configured (`MCP_AUTH_REQUIRED_SCOPES`) and match client tokens.
-5. Confirm Docker daemon strategy for dynamic execution (`DOCKER_HOST` and TLS if remote daemon is used).
-6. Confirm `/livez`, `/readyz`, `/metrics` are restricted at network edge (private network, ingress policy, or gateway ACL).
-7. Confirm audit log path capacity and retention (`MCP_AUDIT_FILE`, rotation settings).
-8. Confirm rollback artifact for previous stable image is available.
+5. Confirm `MCP_REQUIRE_ADMIN_TOKEN=true` and `MCP_ADMIN_TOKEN` is configured in your secret manager.
+6. Confirm Docker daemon strategy for dynamic execution (`DOCKER_HOST` and TLS if remote daemon is used).
+7. Confirm `/livez`, `/readyz`, `/metrics` are restricted at network edge (private network, ingress policy, or gateway ACL).
+8. Confirm audit log path capacity and retention (`MCP_AUDIT_FILE`, rotation settings).
+9. Confirm rollback artifact for previous stable image is available.
 
 ## 2. Deployment Procedure
 

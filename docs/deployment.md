@@ -139,6 +139,7 @@ environment:
   MCP_DYNAMIC_PG_URL: postgres://dynamic_mcp:STRONG_PASSWORD@postgres:5432/dynamic_mcp
 
   # Add admin token
+  MCP_REQUIRE_ADMIN_TOKEN: true
   MCP_ADMIN_TOKEN: your-secret-admin-token
 
   # Enable JWT auth
@@ -244,15 +245,12 @@ annotations:
 
 ## CI/CD
 
-The GitHub Actions workflow (`.github/workflows/ci.yml`) runs:
+GitHub Actions workflows:
 
-| Job | Description |
-|-----|-------------|
-| `verify` | Lint, test, and build on Node.js 20 and 22 |
-| `docker-http-smoke` | Build Docker image and verify `/livez` + `/readyz` |
-| `docker-http-jwt-smoke` | Verify `/mcp` JWT enforcement and anonymous `/livez` `/readyz` `/metrics` behavior |
-| `compose-postgres-smoke` | Start the full Compose stack and verify readiness |
-| `k8s-manifest-validate` | Dry-run kubectl apply on all Kubernetes manifests |
+| Workflow | File | Trigger | Description |
+|----------|------|---------|-------------|
+| `Node CI` | `.github/workflows/nodejs.yml` | `push` | Install dependencies, typecheck, lint, build, and test on Node.js 22.x |
+| `Node.js Package` | `.github/workflows/npm-publish.yml` | `release.created` | Re-run typecheck/lint/build/test and publish to npm with provenance |
 
 ## Production Considerations
 

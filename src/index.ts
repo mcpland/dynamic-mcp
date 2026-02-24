@@ -2,10 +2,13 @@
 
 import { AuditLogger } from './audit/logger.js';
 import { loadRuntimeConfig } from './config/runtime.js';
+import { shutdownPostgresRegistryChangeListeners } from './dynamic/postgres-change-sync.js';
 import { closeAllSharedPostgresPools } from './dynamic/postgres-pool.js';
+import { shutdownSandboxRuntime } from './sandbox/register-session-tools.js';
 import { createMcpServer } from './server/create-server.js';
 import { startHttpTransport } from './transports/http.js';
 import { startStdioTransport } from './transports/stdio.js';
+import { serviceVersion } from './version.js';
 
 async function main(): Promise<void> {
   const config = loadRuntimeConfig();
@@ -16,7 +19,7 @@ async function main(): Promise<void> {
     maxFileBytes: config.audit.maxFileBytes,
     maxFiles: config.audit.maxFiles,
     service: 'dynamic-mcp',
-    serviceVersion: '0.3.0'
+    serviceVersion
   });
 
   if (config.transport === 'stdio') {
@@ -30,7 +33,7 @@ async function main(): Promise<void> {
     });
     installShutdownHandlers(async () => {
       await server.close();
-    }, auditLogger);
+    }, auditLogger, config.sandbox.dockerBinary);
     await startStdioTransport(server);
     console.error('[dynamic-mcp] running in stdio mode');
     return;
@@ -50,12 +53,13 @@ async function main(): Promise<void> {
 
   installShutdownHandlers(async () => {
     await serverHandle.stop();
-  }, auditLogger);
+  }, auditLogger, config.sandbox.dockerBinary);
 }
 
 function installShutdownHandlers(
   stopTransport: () => Promise<void>,
-  auditLogger: AuditLogger
+  auditLogger: AuditLogger,
+  dockerBinary: string
 ): void {
   let shuttingDown = false;
   const shutdown = async (signal: 'SIGINT' | 'SIGTERM'): Promise<void> => {
@@ -66,6 +70,8 @@ function installShutdownHandlers(
 
     try {
       await stopTransport();
+      await shutdownSandboxRuntime(dockerBinary);
+      await shutdownPostgresRegistryChangeListeners();
       await closeAllSharedPostgresPools();
       await auditLogger.flush();
     } catch (error) {

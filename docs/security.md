@@ -18,13 +18,15 @@ Every dynamic tool execution runs in a hardened Docker container with the follow
 | Memory limit | `--memory 512m` (configurable) | Prevent memory exhaustion |
 | CPU limit | `--cpus 1` (configurable) | Prevent CPU starvation |
 | Unprivileged user | `--user node` | Run as non-root user |
-| Network isolation | `--network none` (no deps) | No network access when unnecessary |
+| Network isolation | `--network none` (runtime phase) | No network access during tool execution |
 | Auto-removal | `--rm` | Container removed after execution |
 
 ### Network Policy
 
-- Tools with **no dependencies** run with `--network none` — completely isolated from the network.
-- Tools with **dependencies** use `--network bridge` to allow npm install, which also permits the tool code to make network requests during execution.
+- Tools with **no dependencies** run directly with `--network none`.
+- Tools with **dependencies** use a two-phase flow:
+  - install phase (`npm install`) runs with `--network bridge`
+  - execution phase (`node runner.mjs`) runs with `--network none`
 
 ## Image and Package Controls
 
@@ -54,8 +56,11 @@ Maximum number of dependencies per tool (default: 32, max: 256).
 
 When `MCP_ADMIN_TOKEN` is configured, all management operations (`dynamic.tool.create`, `dynamic.tool.update`, `dynamic.tool.delete`, `dynamic.tool.enable`, `dynamic.tool.list`, `dynamic.tool.get`, and sandbox session tools) require the caller to provide a matching `adminToken` field.
 
+Set `MCP_REQUIRE_ADMIN_TOKEN=true` to enforce this at startup. In this mode, the process fails fast if `MCP_ADMIN_TOKEN` is missing.
+
 ```env
 MCP_ADMIN_TOKEN=your-secret-token
+MCP_REQUIRE_ADMIN_TOKEN=true
 ```
 
 ## Read-Only Mode
@@ -135,7 +140,7 @@ All HTTP responses include:
 
 ### Request Size Limit
 
-POST and DELETE requests with `Content-Length` exceeding `MCP_HTTP_MAX_REQUEST_BYTES` (default: 1 MB) are rejected with HTTP 413 before processing.
+POST and DELETE requests with `Content-Length` exceeding `MCP_HTTP_MAX_REQUEST_BYTES` (default: 100 KB) are rejected with HTTP 413 before processing.
 
 ### Request Tracing
 

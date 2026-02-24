@@ -33,6 +33,7 @@ export interface SessionSandboxOptions {
 const sessionRegistry = new SandboxSessionRegistry();
 let scavengerHandle: NodeJS.Timeout | null = null;
 let cleanupHooksInstalled = false;
+let cleanupInFlight: Promise<void> | null = null;
 
 const InitializeSchema = {
   adminToken: z.string().optional(),
@@ -357,6 +358,21 @@ export function registerSessionSandboxTools(server: McpServer, options: SessionS
   );
 }
 
+export async function shutdownSandboxRuntime(dockerBinary: string): Promise<void> {
+  if (scavengerHandle) {
+    clearInterval(scavengerHandle);
+    scavengerHandle = null;
+  }
+
+  if (!cleanupInFlight) {
+    cleanupInFlight = sessionRegistry.cleanupAll(dockerBinary).finally(() => {
+      cleanupInFlight = null;
+    });
+  }
+
+  await cleanupInFlight;
+}
+
 function ensureScavengerStarted(options: SessionSandboxOptions): void {
   if (scavengerHandle) {
     return;
@@ -372,6 +388,10 @@ function ensureScavengerStarted(options: SessionSandboxOptions): void {
         // Ignore scavenger tick errors.
       });
   }, 60_000);
+
+  if (typeof scavengerHandle.unref === 'function') {
+    scavengerHandle.unref();
+  }
 }
 
 function ensureCleanupHooksInstalled(options: SessionSandboxOptions): void {
@@ -379,21 +399,15 @@ function ensureCleanupHooksInstalled(options: SessionSandboxOptions): void {
     return;
   }
 
-  const cleanup = async () => {
-    await sessionRegistry.cleanupAll(options.dockerBinary);
+  const cleanup = (): void => {
+    void shutdownSandboxRuntime(options.dockerBinary);
   };
 
-  process.on('beforeExit', () => {
-    void cleanup();
-  });
+  process.once('beforeExit', cleanup);
 
-  process.on('SIGINT', () => {
-    void cleanup();
-  });
+  process.once('SIGINT', cleanup);
 
-  process.on('SIGTERM', () => {
-    void cleanup();
-  });
+  process.once('SIGTERM', cleanup);
 
   cleanupHooksInstalled = true;
 }

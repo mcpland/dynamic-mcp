@@ -19,6 +19,7 @@ export interface RuntimeConfig {
     storeFilePath: string;
     maxTools: number;
     readOnly: boolean;
+    requireAdminToken: boolean;
     adminToken?: string;
     postgres?: {
       connectionString: string;
@@ -81,6 +82,14 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
     args['dynamic-max-tools'] ?? env.MCP_DYNAMIC_MAX_TOOLS ?? '256'
   );
   const readOnly = parseBoolean(args['dynamic-read-only'] ?? env.MCP_DYNAMIC_READ_ONLY ?? 'false');
+  const auth = loadAuthConfig(args, env);
+  const requireAdminToken = parseBoolean(
+    args['require-admin-token'] ??
+      env.MCP_REQUIRE_ADMIN_TOKEN ??
+      (profile === 'enterprise' && transport === 'http' && auth.mode === 'jwt'
+        ? 'true'
+        : 'false')
+  );
   const adminToken = normalizeOptionalString(args['admin-token'] ?? env.MCP_ADMIN_TOKEN);
   const postgresConnectionString = normalizeOptionalString(
     args['dynamic-pg-url'] ?? env.MCP_DYNAMIC_PG_URL
@@ -120,9 +129,9 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
         604_800
       ),
       maxRequestBytes: parsePositiveInteger(
-        args['http-max-request-bytes'] ?? env.MCP_HTTP_MAX_REQUEST_BYTES ?? '1000000',
+        args['http-max-request-bytes'] ?? env.MCP_HTTP_MAX_REQUEST_BYTES ?? '102400',
         'MCP HTTP max request bytes',
-        100_000_000
+        102_400
       )
     },
     dynamic: loadDynamicConfig({
@@ -130,6 +139,7 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
       storeFilePath,
       maxTools,
       readOnly,
+      requireAdminToken,
       adminToken,
       postgresConnectionString,
       postgresSchema,
@@ -187,7 +197,7 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
         86_400_000
       )
     },
-    auth: loadAuthConfig(args, env),
+    auth,
     audit: {
       enabled: parseBoolean(
         args['audit-enabled'] ?? env.MCP_AUDIT_ENABLED ?? (profile === 'enterprise' ? 'true' : 'false')
@@ -377,17 +387,23 @@ function loadDynamicConfig(params: {
   storeFilePath: string;
   maxTools: number;
   readOnly: boolean;
+  requireAdminToken: boolean;
   adminToken?: string;
   postgresConnectionString?: string;
   postgresSchema: string;
   postgresInitMaxAttempts: number;
   postgresInitBackoffMs: number;
 }): RuntimeConfig['dynamic'] {
+  if (params.requireAdminToken && !params.adminToken) {
+    throw new Error('Missing required config: MCP_ADMIN_TOKEN');
+  }
+
   const base = {
     backend: params.backend,
     storeFilePath: params.storeFilePath,
     maxTools: params.maxTools,
     readOnly: params.readOnly,
+    requireAdminToken: params.requireAdminToken,
     ...(params.adminToken ? { adminToken: params.adminToken } : {})
   } satisfies Omit<RuntimeConfig['dynamic'], 'postgres'>;
 

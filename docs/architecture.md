@@ -18,9 +18,11 @@ src/
 │   ├── service.ts                   # DynamicToolService: CRUD + runtime registration
 │   ├── registry.ts                  # File-based registry (JSON)
 │   ├── postgres-registry.ts         # PostgreSQL-based registry
+│   ├── postgres-change-sync.ts      # PostgreSQL LISTEN/NOTIFY bridge to in-process change bus
 │   ├── registry-port.ts             # Abstract registry interface
 │   ├── executor.ts                  # Execution engine interface
 │   ├── docker-executor.ts           # Docker-based execution engine
+│   ├── change-bus.ts                # In-process dynamic registry change fan-out
 │   ├── record-utils.ts              # Tool record utilities
 │   └── postgres-pool.ts             # Shared PostgreSQL connection pool
 ├── transports/
@@ -109,17 +111,12 @@ MCP client calls tool "my-tool" with { args: {...} }
   │   └── Assert concurrency limit not exceeded
   │
   └── DockerDynamicToolExecutionEngine.execute(record, args)
-      ├── Create temp workspace
-      ├── Write tool.mjs (user code wrapped in run function)
-      ├── Write runner.mjs (execution harness)
-      ├── Write package.json (with dependencies)
-      │
-      ├── docker run --rm --read-only --cap-drop ALL ...
-      │   ├── [if deps] npm install && node runner.mjs
-      │   └── [no deps] node runner.mjs
-      │
+      ├── Render tool.mjs / runner.mjs / package.json in memory
+      ├── [if deps] create Docker volume workspace
+      ├── [if deps] docker run (network=bridge) -> npm install
+      ├── docker run (network=none) -> node runner.mjs
       ├── Parse result from stdout marker
-      └── Cleanup temp workspace
+      └── Cleanup container + workspace volume
 ```
 
 ### HTTP Transport Sessions
@@ -151,6 +148,8 @@ DELETE /mcp
 Background sweep timer
   └── Every interval, expire sessions idle > TTL
 ```
+
+Although each HTTP session has its own MCP server instance, dynamic tool mutations are broadcast in-process so active sessions converge on the same dynamic tool set.
 
 ## Registry Backends
 
