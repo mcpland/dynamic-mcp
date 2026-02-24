@@ -1,6 +1,6 @@
 {
   "name": "dynamic-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A production-grade **dynamic MCP server** for Node.js",
   "type": "module",
   "packageManager": "pnpm@10.29.3",
