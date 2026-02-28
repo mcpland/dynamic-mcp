@@ -4,9 +4,17 @@
 
 dynamic-mcp implements multiple security layers to ensure safe execution of untrusted code and controlled access to the server.
 
+## Execution Engine Selection
+
+Execution backend is controlled by `MCP_EXECUTION_ENGINE`:
+
+- `auto` (default): prefers Docker; falls back to Node sandbox when Docker is unavailable
+- `docker`: force Docker backend (startup fails if Docker is unavailable)
+- `node`: force Node sandbox backend
+
 ## Docker Sandbox Isolation
 
-Every dynamic tool execution runs in a hardened Docker container with the following constraints:
+When Docker backend is used, dynamic tool execution runs in a hardened Docker container with the following constraints:
 
 | Constraint | Setting | Purpose |
 |-----------|---------|---------|
@@ -27,6 +35,15 @@ Every dynamic tool execution runs in a hardened Docker container with the follow
 - Tools with **dependencies** use a two-phase flow:
   - install phase (`npm install`) runs with `--network bridge`
   - execution phase (`node runner.mjs`) runs with `--network none`
+
+## Node Sandbox Backend
+
+When Node backend is used, execution runs in a separate Node.js child process with timeout/output limits.
+
+Important limitations:
+
+- This is not a container boundary and should not be treated as equivalent to Docker isolation.
+- Dynamic dependency installation is disabled (`dependencies` must be empty).
 
 ## Image and Package Controls
 

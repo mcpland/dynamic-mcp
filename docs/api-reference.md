@@ -36,7 +36,7 @@ Create and register a new dynamic tool.
 | `tool.title` | string | No | Display title (1–120 chars) |
 | `tool.description` | string | Yes | Tool description (1–4000 chars) |
 | `tool.code` | string | Yes | JavaScript function body (1–200000 chars) |
-| `tool.image` | string | No | Docker image (default: `node:lts-slim`) |
+| `tool.image` | string | No | Docker image (used by Docker backend, default: `node:lts-slim`) |
 | `tool.timeoutMs` | number | No | Execution timeout in ms (1000–120000, default: 30000) |
 | `tool.dependencies` | array | No | npm dependencies `[{name, version}]` (max 64) |
 | `tool.enabled` | boolean | No | Initial enabled state (default: `true`) |
@@ -85,7 +85,7 @@ Update an existing dynamic tool definition.
 | `patch.title` | string | No | New title |
 | `patch.description` | string | No | New description |
 | `patch.code` | string | No | New code |
-| `patch.image` | string | No | New Docker image |
+| `patch.image` | string | No | New Docker image (used by Docker backend) |
 | `patch.timeoutMs` | number | No | New timeout |
 | `patch.dependencies` | array | No | New dependencies |
 | `patch.enabled` | boolean | No | New enabled state |
@@ -126,18 +126,23 @@ Enable or disable a dynamic tool at runtime.
 
 #### `run_js_ephemeral`
 
-Execute one-off Node.js code in an isolated Docker sandbox without persisting a tool.
+Execute one-off Node.js code in the configured execution backend without persisting a tool.
 
 **Input:**
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `code` | string | Yes | JavaScript function body (1–200000 chars) |
 | `args` | object | No | Arguments passed to the function (default: `{}`) |
-| `image` | string | No | Docker image override |
+| `image` | string | No | Docker image override (used by Docker backend) |
 | `dependencies` | array | No | npm dependencies `[{name, version}]` (max 64) |
 | `timeoutMs` | number | No | Timeout in ms (1000–120000) |
 
 **Response:** Execution result or error with duration.
+
+Notes:
+
+- `MCP_EXECUTION_ENGINE=auto` prefers Docker and falls back to Node sandbox when Docker is unavailable.
+- In Node sandbox mode, `dependencies` must be empty.
 
 ---
 

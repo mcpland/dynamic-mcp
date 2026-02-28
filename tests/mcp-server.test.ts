@@ -101,6 +101,9 @@ describe('createMcpServer', () => {
       auth: {
         mode: 'none',
         jwtConfigured: false
+      },
+      sandbox: {
+        executionEngine: 'auto'
       }
     });
   });

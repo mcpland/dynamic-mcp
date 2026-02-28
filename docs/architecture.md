@@ -2,7 +2,7 @@
 
 ## Overview
 
-dynamic-mcp is a Model Context Protocol (MCP) server built on the [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk). It extends the standard MCP server pattern with a **dynamic tool registry** that allows tools to be created, modified, and executed at runtime — each in an isolated Docker container.
+dynamic-mcp is a Model Context Protocol (MCP) server built on the [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk). It extends the standard MCP server pattern with a **dynamic tool registry** that allows tools to be created, modified, and executed at runtime using a configurable execution backend (`docker` or `node`).
 
 ## Module Structure
 
@@ -22,6 +22,7 @@ src/
 │   ├── registry-port.ts             # Abstract registry interface
 │   ├── executor.ts                  # Execution engine interface
 │   ├── docker-executor.ts           # Docker-based execution engine
+│   ├── node-sandbox-executor.ts     # Node child-process sandbox execution engine
 │   ├── change-bus.ts                # In-process dynamic registry change fan-out
 │   ├── record-utils.ts              # Tool record utilities
 │   └── postgres-pool.ts             # Shared PostgreSQL connection pool
@@ -82,7 +83,7 @@ createMcpServer(options)
   │   └── Register tool-call-checklist prompt
   │
   ├── Build registry (file or postgres)
-  ├── Build DockerDynamicToolExecutionEngine
+  ├── Resolve execution engine (auto/docker/node)
   ├── Build ToolExecutionGuard
   │
   ├── new DynamicToolService(...)
@@ -110,13 +111,11 @@ MCP client calls tool "my-tool" with { args: {...} }
   │   ├── Assert rate limit not exceeded
   │   └── Assert concurrency limit not exceeded
   │
-  └── DockerDynamicToolExecutionEngine.execute(record, args)
-      ├── Render tool.mjs / runner.mjs / package.json in memory
-      ├── [if deps] create Docker volume workspace
-      ├── [if deps] docker run (network=bridge) -> npm install
-      ├── docker run (network=none) -> node runner.mjs
-      ├── Parse result from stdout marker
-      └── Cleanup container + workspace volume
+  └── Resolved execution engine executes(record, args)
+      ├── [docker] two-phase isolated container flow
+      │   ├── [if deps] install phase (network=bridge)
+      │   └── run phase (network=none)
+      └── [node] isolated child process flow (no dynamic dependencies)
 ```
 
 ### HTTP Transport Sessions

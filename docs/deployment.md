@@ -127,7 +127,11 @@ The Compose file includes sensible defaults:
 - Audit logging: enabled at `/data/audit.log`
 - Health checks for both services
 
-Important: the sample Compose stack does not provide Docker daemon access to the `dynamic-mcp` container. Add a daemon access strategy (host socket or remote daemon) if you need dynamic execution inside the container.
+Important: the sample Compose stack does not provide Docker daemon access to the `dynamic-mcp` container.
+
+- With `MCP_EXECUTION_ENGINE=auto` (default), dynamic execution falls back to Node sandbox when Docker is unavailable.
+- `sandbox.*` tools remain Docker-based and will fail without Docker access.
+- If you require Docker-only behavior, set `MCP_EXECUTION_ENGINE=docker`.
 
 ### Customization
 
@@ -166,7 +170,11 @@ The `deploy/k8s/dynamic-mcp-postgres.yaml` manifest includes:
 - **Deployment** — 2 replicas with security context, resource limits, and health probes
 - **Service** — ClusterIP service on port 8788 with Prometheus scrape annotations
 
-Important: the sample Kubernetes manifest does not configure Docker daemon access for `dynamic-mcp`. For dynamic execution in-cluster, wire the pod to a dedicated remote daemon (recommended) or another controlled runtime integration.
+Important: the sample Kubernetes manifest does not configure Docker daemon access for `dynamic-mcp`.
+
+- With `MCP_EXECUTION_ENGINE=auto` (default), dynamic execution falls back to Node sandbox when Docker is unavailable.
+- `sandbox.*` tools remain Docker-based and will fail without Docker access.
+- For Docker-only execution in-cluster, set `MCP_EXECUTION_ENGINE=docker` and wire the pod to a dedicated remote daemon.
 
 #### Deploy
 

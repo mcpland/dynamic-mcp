@@ -49,6 +49,7 @@ interface HttpServerOptions {
     };
   };
   sandbox: {
+    executionEngine?: 'auto' | 'docker' | 'node';
     dockerBinary: string;
     memoryLimit: string;
     cpuLimit: string;

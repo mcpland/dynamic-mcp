@@ -8,6 +8,7 @@ data:
   MCP_PORT: '8788'
   MCP_PATH: '/mcp'
   MCP_HTTP_MAX_REQUEST_BYTES: '102400'
+  MCP_EXECUTION_ENGINE: 'auto'
 
   MCP_DYNAMIC_BACKEND: 'postgres'
   MCP_DYNAMIC_PG_SCHEMA: 'dynamic_mcp'

@@ -18,6 +18,7 @@ describe('loadRuntimeConfig', () => {
     expect(config.dynamic.maxTools).toBe(256);
     expect(config.dynamic.readOnly).toBe(false);
     expect(config.dynamic.requireAdminToken).toBe(false);
+    expect(config.sandbox.executionEngine).toBe('auto');
     expect(config.sandbox.memoryLimit).toBe('512m');
     expect(config.sandbox.allowedImages).toEqual(['node:lts-slim']);
     expect(config.sandbox.sessionTimeoutSeconds).toBe(1800);
@@ -341,6 +342,7 @@ describe('loadRuntimeConfig', () => {
 
   it('loads sandbox configuration from env vars', () => {
     const config = loadRuntimeConfig([], {
+      MCP_EXECUTION_ENGINE: 'node',
       MCP_SANDBOX_DOCKER_BIN: '/usr/local/bin/docker',
       MCP_SANDBOX_MEMORY_LIMIT: '256m',
       MCP_SANDBOX_CPU_LIMIT: '0.5',
@@ -351,6 +353,7 @@ describe('loadRuntimeConfig', () => {
       MCP_SANDBOX_MAX_SESSIONS: '50'
     });
 
+    expect(config.sandbox.executionEngine).toBe('node');
     expect(config.sandbox.dockerBinary).toBe('/usr/local/bin/docker');
     expect(config.sandbox.memoryLimit).toBe('256m');
     expect(config.sandbox.cpuLimit).toBe('0.5');
@@ -379,6 +382,20 @@ describe('loadRuntimeConfig', () => {
     });
 
     expect(config.sandbox.blockedPackages).toEqual(['pkg-a', 'pkg-b', 'pkg-c']);
+  });
+
+  it('parses execution engine mode from CLI', () => {
+    const dockerConfig = loadRuntimeConfig(['--execution-engine', 'docker'], {});
+    expect(dockerConfig.sandbox.executionEngine).toBe('docker');
+
+    const nodeConfig = loadRuntimeConfig(['--execution-engine', 'node'], {});
+    expect(nodeConfig.sandbox.executionEngine).toBe('node');
+  });
+
+  it('rejects invalid execution engine mode', () => {
+    expect(() => loadRuntimeConfig(['--execution-engine', 'vm'], {})).toThrow(
+      /Invalid MCP execution engine/
+    );
   });
 
   it('handles empty string in allowed images by filtering it out', () => {

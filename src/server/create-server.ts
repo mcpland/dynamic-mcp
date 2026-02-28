@@ -2,10 +2,15 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import { DockerDynamicToolExecutionEngine } from '../dynamic/docker-executor.js';
+import {
+  DockerDynamicToolExecutionEngine,
+  isDockerDaemonAvailable
+} from '../dynamic/docker-executor.js';
+import { NodeSandboxDynamicToolExecutionEngine } from '../dynamic/node-sandbox-executor.js';
 import { ensurePostgresRegistryChangeListener } from '../dynamic/postgres-change-sync.js';
 import { getSharedPostgresPool } from '../dynamic/postgres-pool.js';
 import { PostgresDynamicToolRegistry } from '../dynamic/postgres-registry.js';
+import type { DynamicToolExecutionEngine } from '../dynamic/executor.js';
 import { DynamicToolRegistry } from '../dynamic/registry.js';
 import type { DynamicToolRegistryPort } from '../dynamic/registry-port.js';
 import { DynamicToolService } from '../dynamic/service.js';
@@ -14,6 +19,8 @@ import { registerSessionSandboxTools } from '../sandbox/register-session-tools.j
 import { ToolExecutionGuard } from '../security/guard.js';
 import type { AuditLogger } from '../audit/logger.js';
 import { serviceVersion } from '../version.js';
+
+let nodeFallbackNoticeShown = false;
 
 const HealthOutputSchema = z.object({
   status: z.literal('ok'),
@@ -65,6 +72,7 @@ const RuntimeConfigOutputSchema = z.object({
     toolRateWindowMs: z.number().int().positive()
   }),
   sandbox: z.object({
+    executionEngine: z.enum(['auto', 'docker', 'node']),
     memoryLimit: z.string(),
     cpuLimit: z.string(),
     maxDependencies: z.number().int().positive(),
@@ -109,6 +117,7 @@ export interface CreateMcpServerOptions {
     };
   };
   sandbox: {
+    executionEngine?: 'auto' | 'docker' | 'node';
     dockerBinary: string;
     memoryLimit: string;
     cpuLimit: string;
@@ -145,6 +154,7 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
   }
 
   const startedAt = Date.now();
+  const resolvedExecutionEngine = await resolveDynamicExecutionEngine(options.sandbox, options.auditLogger);
   const runtimeConfigSnapshot = buildRuntimeConfigSnapshot(options);
 
   const server = new McpServer(
@@ -333,7 +343,7 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
 
   const registry = await buildDynamicToolRegistry(options.dynamic);
 
-  const executionEngine = new DockerDynamicToolExecutionEngine(options.sandbox);
+  const executionEngine = resolvedExecutionEngine.engine;
   const executionGuard = new ToolExecutionGuard({
     maxConcurrency: options.security.toolMaxConcurrency,
     maxCallsPerWindow: options.security.toolMaxCallsPerWindow,
@@ -365,7 +375,8 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
     'run_js_ephemeral',
     {
       title: 'Run JS Ephemeral',
-      description: 'Execute one-off Node.js code in an isolated Docker sandbox without persisting a tool',
+      description:
+        'Execute one-off Node.js code in the configured execution sandbox (Docker preferred, Node fallback) without persisting a tool',
       inputSchema: RunJsEphemeralInputSchema
     },
     async ({ code, args, image, dependencies, timeoutMs }) => {
@@ -566,6 +577,7 @@ function buildRuntimeConfigSnapshot(
       toolRateWindowMs: options.security.toolRateWindowMs
     },
     sandbox: {
+      executionEngine: options.sandbox.executionEngine ?? 'auto',
       memoryLimit: options.sandbox.memoryLimit,
       cpuLimit: options.sandbox.cpuLimit,
       maxDependencies: options.sandbox.maxDependencies,
@@ -579,6 +591,78 @@ function buildRuntimeConfigSnapshot(
     audit: {
       enabled: options.auditLogger.isEnabled()
     }
+  };
+}
+
+async function resolveDynamicExecutionEngine(
+  sandbox: CreateMcpServerOptions['sandbox'],
+  auditLogger: AuditLogger
+): Promise<{
+  engine: DynamicToolExecutionEngine;
+  mode: 'docker' | 'node';
+}> {
+  const configuredMode = sandbox.executionEngine ?? 'auto';
+
+  if (configuredMode === 'node') {
+    return {
+      engine: new NodeSandboxDynamicToolExecutionEngine({
+        nodeBinary: process.execPath,
+        memoryLimit: sandbox.memoryLimit,
+        maxDependencies: sandbox.maxDependencies,
+        maxOutputBytes: sandbox.maxOutputBytes,
+        maxTimeoutMs: sandbox.maxTimeoutMs
+      }),
+      mode: 'node'
+    };
+  }
+
+  const dockerAvailable = await isDockerDaemonAvailable(sandbox.dockerBinary);
+  if (configuredMode === 'docker') {
+    if (!dockerAvailable) {
+      throw new Error(
+        `MCP_EXECUTION_ENGINE is set to "docker" but Docker is unavailable (${sandbox.dockerBinary}).`
+      );
+    }
+
+    return {
+      engine: new DockerDynamicToolExecutionEngine(sandbox),
+      mode: 'docker'
+    };
+  }
+
+  if (dockerAvailable) {
+    return {
+      engine: new DockerDynamicToolExecutionEngine(sandbox),
+      mode: 'docker'
+    };
+  }
+
+  if (!nodeFallbackNoticeShown) {
+    console.error(
+      '[dynamic-mcp] Docker unavailable; falling back to node sandbox execution engine (dependencies disabled).'
+    );
+    nodeFallbackNoticeShown = true;
+  }
+  void auditLogger.log({
+    action: 'execution.engine.select',
+    actor: 'system',
+    result: 'success',
+    details: {
+      configured: 'auto',
+      selected: 'node',
+      reason: 'docker_unavailable'
+    }
+  });
+
+  return {
+    engine: new NodeSandboxDynamicToolExecutionEngine({
+      nodeBinary: process.execPath,
+      memoryLimit: sandbox.memoryLimit,
+      maxDependencies: sandbox.maxDependencies,
+      maxOutputBytes: sandbox.maxOutputBytes,
+      maxTimeoutMs: sandbox.maxTimeoutMs
+    }),
+    mode: 'node'
   };
 }
 

@@ -24,6 +24,15 @@ export interface DockerDynamicExecutionOptions {
   blockedPackages: string[];
 }
 
+export async function isDockerDaemonAvailable(dockerBinary: string): Promise<boolean> {
+  try {
+    await runDockerInfo(dockerBinary);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export class DockerDynamicToolExecutionEngine implements DynamicToolExecutionEngine {
   private readonly options: DockerDynamicExecutionOptions;
   private dockerCheckedAt = 0;
@@ -211,10 +220,7 @@ export class DockerDynamicToolExecutionEngine implements DynamicToolExecutionEng
     this.dockerCheckedAt = now;
 
     try {
-      await execFileAsync(this.options.dockerBinary, ['info'], {
-        timeout: 5_000,
-        maxBuffer: 200_000
-      });
+      await runDockerInfo(this.options.dockerBinary);
       this.dockerAvailable = true;
     } catch {
       this.dockerAvailable = false;
@@ -427,4 +433,11 @@ async function removeDockerVolume(dockerBinary: string, volumeName: string): Pro
   } catch {
     // Ignore best-effort cleanup failures.
   }
+}
+
+async function runDockerInfo(dockerBinary: string): Promise<void> {
+  await execFileAsync(dockerBinary, ['info'], {
+    timeout: 5_000,
+    maxBuffer: 200_000
+  });
 }

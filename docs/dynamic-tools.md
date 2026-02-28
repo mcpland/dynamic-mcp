@@ -2,7 +2,7 @@
 
 ## Overview
 
-Dynamic tools are JavaScript functions that can be created, updated, and managed at runtime through the MCP control plane (`dynamic.tool.*` tools). Each tool runs in an isolated Docker container with its own npm dependencies.
+Dynamic tools are JavaScript functions that can be created, updated, and managed at runtime through the MCP control plane (`dynamic.tool.*` tools). Tools execute through the configured backend (`docker` or `node`).
 
 ## Code Contract
 
@@ -176,9 +176,15 @@ For one-off code execution that doesn't need to be persisted as a tool:
 }
 ```
 
-This creates a temporary tool record, executes it in a Docker container, and discards it. No tool is registered in the registry.
+This creates a temporary tool record, executes it in the configured backend, and discards it. No tool is registered in the registry.
 
 ## Execution Environment
+
+Execution backend is controlled by `MCP_EXECUTION_ENGINE` (`auto` / `docker` / `node`):
+
+- `auto` (default): prefers Docker; falls back to Node sandbox when Docker is unavailable
+- `docker`: force Docker backend
+- `node`: force Node sandbox backend
 
 ### Container Setup
 
@@ -209,6 +215,7 @@ If no marker is found in stdout, the raw output is returned as text.
 - **With dependencies:** Runtime is split into two phases:
   - Dependency install phase uses `--network bridge`.
   - Tool execution phase uses `--network none`.
+- **Node sandbox backend:** Runs in an isolated child Node.js process on the host (no container network boundary).
 
 ### Limits
 
@@ -220,6 +227,10 @@ If no marker is found in stdout, the raw output is returned as text.
 | Dependencies | 32 max | `MCP_SANDBOX_MAX_DEPENDENCIES` |
 | Output size | 200 KB | `MCP_SANDBOX_MAX_OUTPUT_BYTES` |
 | PIDs | 256 | Hardcoded |
+
+Node sandbox backend limitation:
+
+- Dynamic dependency installation is not supported. If `dependencies` is non-empty, execution is rejected.
 
 ## Tool Name Constraints
 

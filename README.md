@@ -4,14 +4,14 @@
 [![npm](https://img.shields.io/npm/v/dynamic-mcp.svg)](https://www.npmjs.com/package/dynamic-mcp)
 ![license](https://img.shields.io/npm/l/dynamic-mcp)
 
-A production-grade **dynamic MCP server** for Node.js that enables runtime tool creation, management, and execution in isolated Docker sandboxes.
+A production-grade **dynamic MCP server** for Node.js that enables runtime tool creation, management, and execution in isolated execution sandboxes (`docker` or `node`).
 
-Unlike static MCP servers that define tools at compile time, dynamic-mcp lets AI agents and operators create, update, and delete tools on the fly — each running in a hardened Docker container with full lifecycle management.
+Unlike static MCP servers that define tools at compile time, dynamic-mcp lets AI agents and operators create, update, and delete tools on the fly with full lifecycle management.
 
 ## Key Features
 
 - **Runtime tool management** — Create, update, delete, enable/disable tools without restarts via the `dynamic.tool.*` control plane
-- **Docker sandbox isolation** — Every tool execution runs in a locked-down container (read-only FS, dropped capabilities, PID/memory/CPU limits)
+- **Execution backend selection** — `auto` (Docker preferred, Node fallback), or force `docker` / `node`
 - **Dual transport** — Stdio for local/CLI use, Streamable HTTP for networked deployments with per-session MCP servers
 - **Dual registry backend** — File-based (single node) or PostgreSQL (multi-instance) with optimistic concurrency control
 - **Execution guard** — Global concurrency and per-scope rate limiting to prevent abuse
@@ -22,7 +22,7 @@ Unlike static MCP servers that define tools at compile time, dynamic-mcp lets AI
 
 ## Quick Start
 
-**Prerequisites:** Node.js >= 20, Docker
+**Prerequisites:** Node.js >= 20 (Docker recommended)
 
 Fastest way to run `stdio` (no clone/build):
 
@@ -85,7 +85,13 @@ Then use an absolute path to `dist/index.js` in client config. Example:
 node /ABS/PATH/TO/dynamic-mcp/dist/index.js --transport stdio --profile mvp
 ```
 
-Dynamic code execution features (registered dynamic tools, `run_js_ephemeral`, `sandbox.*`) require a reachable Docker daemon.
+Dynamic code execution features use the selected execution backend (`docker` or `node`).
+Note: `sandbox.*` tools remain Docker-based; in environments without Docker, use `mvp` profile or avoid `sandbox.*`.
+Execution backend can be controlled with `MCP_EXECUTION_ENGINE` / `--execution-engine`:
+
+- `auto` (default): use Docker when available, fallback to Node sandbox when Docker is unavailable
+- `docker`: force Docker
+- `node`: force Node sandbox (no dynamic dependency installation)
 
 ### 2. Claude Desktop (Local stdio)
 
@@ -253,6 +259,7 @@ MCP_PROFILE=enterprise
 MCP_HOST=0.0.0.0
 MCP_PORT=8788
 MCP_PATH=/mcp
+MCP_EXECUTION_ENGINE=auto
 MCP_DYNAMIC_BACKEND=postgres
 MCP_REQUIRE_ADMIN_TOKEN=true
 MCP_ADMIN_TOKEN=change-me
@@ -349,12 +356,14 @@ docker build -t dynamic-mcp:latest .
 docker run --rm -p 8788:8788 dynamic-mcp:latest
 ```
 
-For dynamic tool execution (registered dynamic tools, `run_js_ephemeral`, `sandbox.*`) in containerized deployments, the running `dynamic-mcp` process must have:
+When `MCP_EXECUTION_ENGINE=auto` (default), dynamic tool execution (`dynamic.*`, `run_js_ephemeral`) uses Docker when available and falls back to Node sandbox when Docker is unavailable.
+
+`sandbox.*` tools remain Docker-based. For those tools in containerized deployments, the running `dynamic-mcp` process must have:
 
 - A Docker CLI binary available in the container (`docker`)
 - Connectivity and authorization to a Docker daemon (local socket or remote daemon)
 
-Without that access, dynamic tool execution will fail at runtime.
+Without that Docker access, `sandbox.*` calls fail at runtime.
 
 Security note: exposing the host Docker socket gives the container high privilege over the host. Prefer a dedicated remote Docker daemon with network isolation and TLS for production.
 

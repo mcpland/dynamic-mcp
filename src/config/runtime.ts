@@ -3,6 +3,7 @@ import { config as loadDotEnv } from 'dotenv';
 
 export type TransportMode = 'stdio' | 'http';
 export type FeatureProfile = 'mvp' | 'enterprise';
+export type ExecutionEngineMode = 'auto' | 'docker' | 'node';
 
 export interface RuntimeConfig {
   profile: FeatureProfile;
@@ -29,6 +30,7 @@ export interface RuntimeConfig {
     };
   };
   sandbox: {
+    executionEngine: ExecutionEngineMode;
     dockerBinary: string;
     memoryLimit: string;
     cpuLimit: string;
@@ -115,6 +117,9 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
       env.MCP_SANDBOX_BLOCKED_PACKAGES ??
       'child_process,node-pty,npm,pm2'
   );
+  const executionEngine = parseExecutionEngineMode(
+    args['execution-engine'] ?? env.MCP_EXECUTION_ENGINE ?? 'auto'
+  );
 
   return {
     profile,
@@ -147,6 +152,7 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
       postgresInitBackoffMs
     }),
     sandbox: {
+      executionEngine,
       dockerBinary: args['docker-bin'] ?? env.MCP_SANDBOX_DOCKER_BIN ?? 'docker',
       memoryLimit: args['sandbox-memory'] ?? env.MCP_SANDBOX_MEMORY_LIMIT ?? '512m',
       cpuLimit: args['sandbox-cpu'] ?? env.MCP_SANDBOX_CPU_LIMIT ?? '1',
@@ -310,6 +316,15 @@ function parseDynamicBackend(value: string): RuntimeConfig['dynamic']['backend']
   }
 
   throw new Error(`Invalid MCP dynamic backend "${value}". Expected "file" or "postgres".`);
+}
+
+function parseExecutionEngineMode(value: string): ExecutionEngineMode {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'auto' || normalized === 'docker' || normalized === 'node') {
+    return normalized;
+  }
+
+  throw new Error(`Invalid MCP execution engine "${value}". Expected "auto", "docker", or "node".`);
 }
 
 function parsePositiveInteger(value: string, label: string, max: number): number {

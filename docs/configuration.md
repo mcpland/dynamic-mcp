@@ -86,6 +86,7 @@ Required when `MCP_DYNAMIC_BACKEND=postgres`.
 
 | Env Variable | CLI Arg | Default | Description |
 |-------------|---------|---------|-------------|
+| `MCP_EXECUTION_ENGINE` | `--execution-engine` | `auto` | Execution backend: `auto`, `docker`, or `node` |
 | `MCP_SANDBOX_DOCKER_BIN` | `--docker-bin` | `docker` | Path to Docker binary |
 | `MCP_SANDBOX_MEMORY_LIMIT` | `--sandbox-memory` | `512m` | Container memory limit |
 | `MCP_SANDBOX_CPU_LIMIT` | `--sandbox-cpu` | `1` | Container CPU limit |
@@ -96,6 +97,12 @@ Required when `MCP_DYNAMIC_BACKEND=postgres`.
 | `MCP_SANDBOX_BLOCKED_PACKAGES` | `--sandbox-blocked-packages` | `child_process,node-pty,npm,pm2` | Comma-separated blocklist of npm packages |
 | `MCP_SANDBOX_SESSION_TIMEOUT_SECONDS` | `--sandbox-session-timeout-seconds` | `1800` | Idle timeout for sandbox sessions (enterprise, max 172800) |
 | `MCP_SANDBOX_MAX_SESSIONS` | `--sandbox-max-sessions` | `20` | Max concurrent sandbox sessions (enterprise, max 1000) |
+
+Execution engine mode:
+
+- `auto`: prefer Docker, fallback to Node sandbox when Docker is unavailable
+- `docker`: require Docker (startup fails if Docker is unavailable)
+- `node`: force Node sandbox (dynamic dependency install is disabled)
 
 ## Execution Guard
 
