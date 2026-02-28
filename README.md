@@ -22,7 +22,17 @@ Unlike static MCP servers that define tools at compile time, dynamic-mcp lets AI
 
 ## Quick Start
 
-**Prerequisites:** Node.js >= 20, pnpm, Docker
+**Prerequisites:** Node.js >= 20, Docker
+
+Fastest way to run `stdio` (no clone/build):
+
+```bash
+npx -y dynamic-mcp --transport stdio --profile mvp
+# optional: pin version for reproducibility
+npx -y dynamic-mcp@<version> --transport stdio --profile mvp
+```
+
+From source (local development):
 
 ```bash
 # Install dependencies
@@ -52,16 +62,24 @@ This project supports both MCP standard transports:
 - `stdio` (recommended for local development/CLI clients)
 - Streamable HTTP (recommended for remote/network deployment)
 
-### 1. Prepare Runtime for Client Config
+### 1. Stdio Runtime Options
 
-Most MCP clients launch your server as a child process in `stdio` mode, so build once before wiring client config:
+Most MCP clients launch your server as a child process in `stdio` mode.
+
+Option A (recommended for quick setup): run from npm with `npx`:
+
+```bash
+npx -y dynamic-mcp --transport stdio --profile mvp
+```
+
+Option B (recommended when developing this repo): build local runtime first:
 
 ```bash
 pnpm install
 pnpm build
 ```
 
-Use an absolute path to `dist/index.js` in client config. Example:
+Then use an absolute path to `dist/index.js` in client config. Example:
 
 ```bash
 node /ABS/PATH/TO/dynamic-mcp/dist/index.js --transport stdio --profile mvp
@@ -85,9 +103,10 @@ Example:
 {
   "mcpServers": {
     "dynamic-mcp": {
-      "command": "node",
+      "command": "npx",
       "args": [
-        "/ABS/PATH/TO/dynamic-mcp/dist/index.js",
+        "-y",
+        "dynamic-mcp",
         "--transport",
         "stdio",
         "--profile",
@@ -110,7 +129,7 @@ Note: Claude Desktop remote MCP server management is done in app settings (`Sett
 Add local stdio server:
 
 ```bash
-claude mcp add dynamic-mcp -- node /ABS/PATH/TO/dynamic-mcp/dist/index.js --transport stdio --profile mvp
+claude mcp add dynamic-mcp -- npx -y dynamic-mcp --transport stdio --profile mvp
 ```
 
 Add remote HTTP server:
@@ -125,9 +144,10 @@ Project-level `.mcp.json` example (supports both local and remote server definit
 {
   "mcpServers": {
     "dynamic-mcp-local": {
-      "command": "node",
+      "command": "npx",
       "args": [
-        "/ABS/PATH/TO/dynamic-mcp/dist/index.js",
+        "-y",
+        "dynamic-mcp",
         "--transport",
         "stdio",
         "--profile",
@@ -155,9 +175,10 @@ Local stdio example:
 {
   "servers": {
     "dynamic-mcp": {
-      "command": "node",
+      "command": "npx",
       "args": [
-        "/ABS/PATH/TO/dynamic-mcp/dist/index.js",
+        "-y",
+        "dynamic-mcp",
         "--transport",
         "stdio",
         "--profile",
@@ -202,6 +223,8 @@ Server startup example:
 pnpm run dev:http
 # or:
 node /ABS/PATH/TO/dynamic-mcp/dist/index.js --transport http --host 127.0.0.1 --port 8788 --path /mcp
+# or:
+npx -y dynamic-mcp --transport http --host 127.0.0.1 --port 8788 --path /mcp
 ```
 
 In HTTP mode, the server runs as an independent process/container, and MCP clients connect to the configured URL.
