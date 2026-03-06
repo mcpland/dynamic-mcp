@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 import { AuditLogger } from '../src/audit/logger.js';
 import { createMcpServer } from '../src/server/create-server.js';
@@ -104,6 +105,9 @@ describe('createMcpServer', () => {
       },
       sandbox: {
         executionEngine: 'auto'
+      },
+      experimental: {
+        upstreamMcpAttach: false
       }
     });
   });
@@ -366,6 +370,129 @@ describe('createMcpServer', () => {
     expect(toolNames).toContain('dynamic.tool.update');
     expect(toolNames).toContain('dynamic.tool.delete');
     expect(toolNames).toContain('dynamic.tool.enable');
+    expect(toolNames).not.toContain('upstream.mcp.attach');
+    expect(toolNames).not.toContain('upstream.mcp.detach');
+  });
+
+  it('registers upstream.mcp.attach only when experimental flag is enabled', async () => {
+    const storeRoot = await mkdtemp(join(tmpdir(), 'dynamic-mcp-server-upstream-flag-'));
+    const fixturePath = fileURLToPath(new URL('./fixtures/upstream-stdio-server.mjs', import.meta.url));
+    const baseConfig = buildEnterpriseConfig(storeRoot);
+    const server = await createMcpServer({
+      ...baseConfig,
+      dynamic: {
+        ...baseConfig.dynamic,
+        adminToken: 'upstream-admin-token'
+      },
+      experimental: {
+        upstreamMcpAttach: true
+      }
+    });
+    const client = new Client({ name: 'test-client', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    openedServers.push(server);
+    openedClients.push(client);
+
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    const tools = await client.listTools();
+    const toolNames = tools.tools.map((t) => t.name);
+    expect(toolNames).toContain('upstream.mcp.attach');
+    expect(toolNames).toContain('upstream.mcp.detach');
+
+    const result = await client.callTool({
+      name: 'upstream.mcp.attach',
+      arguments: {
+        adminToken: 'upstream-admin-token',
+        alias: 'fixture.upstream',
+        transport: 'stdio',
+        command: process.execPath,
+        args: [fixturePath]
+      }
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      alias: 'fixture.upstream',
+      transport: 'stdio'
+    });
+    const output = result.structuredContent as { toolNames: string[] };
+    expect(output.toolNames).toContain('fixture.ping');
+
+    const detached = await client.callTool({
+      name: 'upstream.mcp.detach',
+      arguments: {
+        adminToken: 'upstream-admin-token',
+        alias: 'fixture.upstream'
+      }
+    });
+    expect(detached.isError).not.toBe(true);
+    expect(detached.structuredContent).toMatchObject({
+      alias: 'fixture.upstream',
+      detached: true
+    });
+  });
+
+  it('enforces upstream attach max limit', async () => {
+    const storeRoot = await mkdtemp(join(tmpdir(), 'dynamic-mcp-server-upstream-limit-'));
+    const fixturePath = fileURLToPath(new URL('./fixtures/upstream-stdio-server.mjs', import.meta.url));
+    const baseConfig = buildEnterpriseConfig(storeRoot);
+    const server = await createMcpServer({
+      ...baseConfig,
+      dynamic: {
+        ...baseConfig.dynamic,
+        adminToken: 'upstream-admin-token'
+      },
+      experimental: {
+        upstreamMcpAttach: true,
+        upstreamMcpAttachMax: 1
+      }
+    });
+    const client = new Client({ name: 'test-client', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    openedServers.push(server);
+    openedClients.push(client);
+
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    const firstAttach = await client.callTool({
+      name: 'upstream.mcp.attach',
+      arguments: {
+        adminToken: 'upstream-admin-token',
+        alias: 'fixture.a',
+        transport: 'stdio',
+        command: process.execPath,
+        args: [fixturePath]
+      }
+    });
+    expect(firstAttach.isError).not.toBe(true);
+
+    const secondAttach = await client.callTool({
+      name: 'upstream.mcp.attach',
+      arguments: {
+        adminToken: 'upstream-admin-token',
+        alias: 'fixture.b',
+        transport: 'stdio',
+        command: process.execPath,
+        args: [fixturePath]
+      }
+    });
+    expect(secondAttach.isError).toBe(true);
+    expect((secondAttach.content[0] as { text: string }).text).toMatch(/limit/i);
+  });
+
+  it('requires admin token to enable upstream attach feature', async () => {
+    const storeRoot = await mkdtemp(join(tmpdir(), 'dynamic-mcp-server-upstream-admin-required-'));
+    await expect(
+      createMcpServer({
+        ...buildEnterpriseConfig(storeRoot),
+        experimental: {
+          upstreamMcpAttach: true
+        }
+      })
+    ).rejects.toThrow(/MCP_ADMIN_TOKEN/);
   });
 
   it('service.meta resource returns metadata', async () => {

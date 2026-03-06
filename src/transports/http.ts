@@ -75,6 +75,9 @@ interface HttpServerOptions {
       requiredScopes: string[];
     };
   };
+  experimental?: {
+    upstreamMcpAttach?: boolean;
+  };
   auditLogger: AuditLogger;
 }
 
@@ -186,6 +189,7 @@ export async function startHttpTransport(
       sandbox: options.sandbox,
       security: options.security,
       auth: options.auth,
+      experimental: options.experimental,
       auditLogger: options.auditLogger
     });
     const transport = new StreamableHTTPServerTransport({

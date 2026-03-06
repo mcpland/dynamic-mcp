@@ -56,6 +56,10 @@ export interface RuntimeConfig {
       requiredScopes: string[];
     };
   };
+  experimental: {
+    upstreamMcpAttach: boolean;
+    upstreamMcpAttachMax: number;
+  };
   audit: {
     enabled: boolean;
     filePath: string;
@@ -119,6 +123,18 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
   );
   const executionEngine = parseExecutionEngineMode(
     args['execution-engine'] ?? env.MCP_EXECUTION_ENGINE ?? 'auto'
+  );
+  const experimentalUpstreamMcpAttach = parseBoolean(
+    args['experimental-upstream-mcp-attach'] ??
+      env.MCP_EXPERIMENTAL_UPSTREAM_MCP_ATTACH ??
+      'false'
+  );
+  const experimentalUpstreamMcpAttachMax = parsePositiveInteger(
+    args['experimental-upstream-mcp-attach-max'] ??
+      env.MCP_EXPERIMENTAL_UPSTREAM_MCP_ATTACH_MAX ??
+      '8',
+    'MCP experimental upstream attach max',
+    256
   );
 
   return {
@@ -204,6 +220,10 @@ export function loadRuntimeConfig(argv = process.argv.slice(2), env = process.en
       )
     },
     auth,
+    experimental: {
+      upstreamMcpAttach: experimentalUpstreamMcpAttach,
+      upstreamMcpAttachMax: experimentalUpstreamMcpAttachMax
+    },
     audit: {
       enabled: parseBoolean(
         args['audit-enabled'] ?? env.MCP_AUDIT_ENABLED ?? (profile === 'enterprise' ? 'true' : 'false')

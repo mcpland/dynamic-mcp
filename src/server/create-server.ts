@@ -18,6 +18,7 @@ import { DynamicDependencySchema, type DynamicToolRecord } from '../dynamic/spec
 import { registerSessionSandboxTools } from '../sandbox/register-session-tools.js';
 import { ToolExecutionGuard } from '../security/guard.js';
 import type { AuditLogger } from '../audit/logger.js';
+import { UpstreamMcpAttachService } from '../upstream/attach-service.js';
 import { serviceVersion } from '../version.js';
 
 let nodeFallbackNoticeShown = false;
@@ -85,6 +86,10 @@ const RuntimeConfigOutputSchema = z.object({
   }),
   audit: z.object({
     enabled: z.boolean()
+  }),
+  experimental: z.object({
+    upstreamMcpAttach: z.boolean(),
+    upstreamMcpAttachMax: z.number().int().positive()
   })
 });
 
@@ -143,6 +148,10 @@ export interface CreateMcpServerOptions {
       requiredScopes: string[];
     };
   };
+  experimental?: {
+    upstreamMcpAttach?: boolean;
+    upstreamMcpAttachMax?: number;
+  };
   auditLogger: AuditLogger;
 }
 
@@ -150,6 +159,15 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
   if (options.dynamic.requireAdminToken && !options.dynamic.adminToken) {
     throw new Error(
       'Missing required config: MCP_ADMIN_TOKEN (required when MCP_REQUIRE_ADMIN_TOKEN=true).'
+    );
+  }
+  if (
+    options.profile === 'enterprise' &&
+    options.experimental?.upstreamMcpAttach &&
+    !options.dynamic.adminToken
+  ) {
+    throw new Error(
+      'Missing required config: MCP_ADMIN_TOKEN (required when MCP_EXPERIMENTAL_UPSTREAM_MCP_ATTACH=true).'
     );
   }
 
@@ -359,6 +377,17 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
     auditLogger: options.auditLogger
   });
   await dynamicService.initialize();
+  let upstreamAttachService: UpstreamMcpAttachService | undefined;
+  if (options.profile === 'enterprise' && options.experimental?.upstreamMcpAttach) {
+    upstreamAttachService = new UpstreamMcpAttachService({
+      server,
+      executionGuard,
+      auditLogger: options.auditLogger,
+      adminToken: options.dynamic.adminToken,
+      maxAttached: options.experimental.upstreamMcpAttachMax ?? 8
+    });
+    upstreamAttachService.initialize();
+  }
   const originalServerClose = server.close.bind(server);
   let serverClosed = false;
   server.close = async () => {
@@ -368,6 +397,9 @@ export async function createMcpServer(options: CreateMcpServerOptions): Promise<
 
     serverClosed = true;
     dynamicService.dispose();
+    if (upstreamAttachService) {
+      await upstreamAttachService.dispose();
+    }
     await originalServerClose();
   };
 
@@ -590,6 +622,10 @@ function buildRuntimeConfigSnapshot(
     },
     audit: {
       enabled: options.auditLogger.isEnabled()
+    },
+    experimental: {
+      upstreamMcpAttach: Boolean(options.experimental?.upstreamMcpAttach),
+      upstreamMcpAttachMax: options.experimental?.upstreamMcpAttachMax ?? 8
     }
   };
 }

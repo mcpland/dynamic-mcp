@@ -71,7 +71,7 @@ Maximum number of dependencies per tool (default: 32, max: 256).
 
 ## Admin Token
 
-When `MCP_ADMIN_TOKEN` is configured, all management operations (`dynamic.tool.create`, `dynamic.tool.update`, `dynamic.tool.delete`, `dynamic.tool.enable`, `dynamic.tool.list`, `dynamic.tool.get`, and sandbox session tools) require the caller to provide a matching `adminToken` field.
+When `MCP_ADMIN_TOKEN` is configured, all management operations (`dynamic.tool.create`, `dynamic.tool.update`, `dynamic.tool.delete`, `dynamic.tool.enable`, `dynamic.tool.list`, `dynamic.tool.get`, `upstream.mcp.attach`, `upstream.mcp.detach`, and sandbox session tools) require the caller to provide a matching `adminToken` field.
 
 Set `MCP_REQUIRE_ADMIN_TOKEN=true` to enforce this at startup. In this mode, the process fails fast if `MCP_ADMIN_TOKEN` is missing.
 
@@ -79,6 +79,24 @@ Set `MCP_REQUIRE_ADMIN_TOKEN=true` to enforce this at startup. In this mode, the
 MCP_ADMIN_TOKEN=your-secret-token
 MCP_REQUIRE_ADMIN_TOKEN=true
 ```
+
+## Experimental Upstream Attach
+
+`upstream.mcp.attach` / `upstream.mcp.detach` are behind `MCP_EXPERIMENTAL_UPSTREAM_MCP_ATTACH=true` and are available only in `enterprise` profile.
+
+When this feature is enabled, `MCP_ADMIN_TOKEN` is required at startup.
+
+Risk profile:
+
+- `transport=stdio` can spawn arbitrary local processes and inherits host-level execution privileges of the dynamic-mcp process.
+- `transport=http` can connect to external MCP endpoints, including endpoints requiring sensitive headers.
+
+Hardening guidance:
+
+- Keep the feature disabled unless required.
+- Require admin token (`MCP_REQUIRE_ADMIN_TOKEN=true`) before enabling.
+- Run dynamic-mcp with least privilege and strict egress/network controls.
+- Keep `MCP_EXPERIMENTAL_UPSTREAM_MCP_ATTACH_MAX` low (default: `8`) to reduce process/session exhaustion risk.
 
 ## Read-Only Mode
 

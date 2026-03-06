@@ -298,6 +298,68 @@ Return current server time.
 
 ---
 
+### Experimental (Feature Flag)
+
+#### `upstream.mcp.attach`
+
+Available only when all conditions are met:
+
+- `MCP_PROFILE=enterprise`
+- `MCP_EXPERIMENTAL_UPSTREAM_MCP_ATTACH=true`
+- `MCP_ADMIN_TOKEN` is configured
+
+Attach to an existing upstream MCP server (`stdio` or `http`) and return its current tool list.
+
+**Input:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `adminToken` | string | If configured | Admin authentication token |
+| `alias` | string | Yes | Local alias for this attached upstream |
+| `transport` | enum | Yes | `stdio` or `http` |
+| `command` | string | Required if `transport=stdio` | Executable to spawn |
+| `args` | string[] | No | Command arguments (default: `[]`) |
+| `env` | object | No | Environment overrides for stdio process (default: `{}`) |
+| `cwd` | string | No | Working directory for stdio process |
+| `url` | string | Required if `transport=http` | Upstream MCP endpoint URL |
+| `headers` | object | No | HTTP headers for upstream calls (default: `{}`) |
+| `replace` | boolean | No | Replace existing alias binding (default: `false`) |
+
+**Output:**
+```json
+{
+  "alias": "github.main",
+  "transport": "http",
+  "target": "https://example.com/mcp",
+  "toolCount": 24,
+  "toolNames": ["issues.create", "issues.list"],
+  "attachedAt": "2026-03-05T00:00:00.000Z"
+}
+```
+
+Current scope: discovery and attachment only. This experimental tool does not yet proxy or mount upstream tools into this server's own tool namespace.
+
+The number of concurrent attached aliases is capped by `MCP_EXPERIMENTAL_UPSTREAM_MCP_ATTACH_MAX` (default: `8`).
+
+#### `upstream.mcp.detach`
+
+Detach a previously attached upstream alias and release related resources.
+
+**Input:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `adminToken` | string | Yes when configured | Admin authentication token |
+| `alias` | string | Yes | Alias to detach |
+
+**Output:**
+```json
+{
+  "alias": "github.main",
+  "detached": true
+}
+```
+
+---
+
 ## Resources (Enterprise Only)
 
 #### `dynamic://service/meta`

@@ -26,6 +26,8 @@ describe('loadRuntimeConfig', () => {
     expect(config.security.toolMaxConcurrency).toBe(8);
     expect(config.security.toolRateWindowMs).toBe(60000);
     expect(config.auth.mode).toBe('none');
+    expect(config.experimental.upstreamMcpAttach).toBe(false);
+    expect(config.experimental.upstreamMcpAttachMax).toBe(8);
     expect(config.audit.enabled).toBe(false);
     expect(config.audit.filePath.endsWith('.dynamic-mcp/audit.log')).toBe(true);
     expect(config.audit.maxFileBytes).toBe(10_000_000);
@@ -390,6 +392,39 @@ describe('loadRuntimeConfig', () => {
 
     const nodeConfig = loadRuntimeConfig(['--execution-engine', 'node'], {});
     expect(nodeConfig.sandbox.executionEngine).toBe('node');
+  });
+
+  it('loads experimental upstream attach flag from env and CLI', () => {
+    const envEnabled = loadRuntimeConfig([], {
+      MCP_EXPERIMENTAL_UPSTREAM_MCP_ATTACH: 'true',
+      MCP_EXPERIMENTAL_UPSTREAM_MCP_ATTACH_MAX: '12'
+    });
+    expect(envEnabled.experimental.upstreamMcpAttach).toBe(true);
+    expect(envEnabled.experimental.upstreamMcpAttachMax).toBe(12);
+
+    const cliDisabled = loadRuntimeConfig(
+      [
+        '--experimental-upstream-mcp-attach',
+        'false',
+        '--experimental-upstream-mcp-attach-max',
+        '3'
+      ],
+      {
+        MCP_EXPERIMENTAL_UPSTREAM_MCP_ATTACH: 'true'
+      }
+    );
+    expect(cliDisabled.experimental.upstreamMcpAttach).toBe(false);
+    expect(cliDisabled.experimental.upstreamMcpAttachMax).toBe(3);
+  });
+
+  it('rejects invalid experimental upstream attach max', () => {
+    expect(() =>
+      loadRuntimeConfig(['--experimental-upstream-mcp-attach-max', '0'], {})
+    ).toThrow(/MCP experimental upstream attach max/);
+
+    expect(() =>
+      loadRuntimeConfig(['--experimental-upstream-mcp-attach-max', '999'], {})
+    ).toThrow(/MCP experimental upstream attach max/);
   });
 
   it('rejects invalid execution engine mode', () => {

@@ -18,6 +18,17 @@ For deployment workflow, acceptance checks, and rollback procedure, see [`docs/p
 | `MCP_PROFILE` | `--profile` | `mvp` | Feature profile: `mvp` or `enterprise` |
 | `MCP_TRANSPORT` | `--transport` | `stdio` | Transport mode: `stdio` or `http` |
 
+## Experimental Feature Flags
+
+Experimental features are disabled by default and may change without backwards compatibility guarantees.
+
+| Env Variable | CLI Arg | Default | Description |
+|-------------|---------|---------|-------------|
+| `MCP_EXPERIMENTAL_UPSTREAM_MCP_ATTACH` | `--experimental-upstream-mcp-attach` | `false` | Enable `upstream.mcp.attach` (enterprise only) for attaching to existing upstream MCP servers (`stdio`/`http`) |
+| `MCP_EXPERIMENTAL_UPSTREAM_MCP_ATTACH_MAX` | `--experimental-upstream-mcp-attach-max` | `8` | Maximum concurrently attached upstream aliases (1–256) |
+
+Security note: `upstream.mcp.attach` can spawn local processes when `transport=stdio`. Treat it as privileged and protect with `MCP_ADMIN_TOKEN` + `MCP_REQUIRE_ADMIN_TOKEN=true`. When `MCP_EXPERIMENTAL_UPSTREAM_MCP_ATTACH=true`, `MCP_ADMIN_TOKEN` is required at startup.
+
 ## HTTP Transport
 
 Used when `MCP_TRANSPORT=http`.

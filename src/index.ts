@@ -29,6 +29,7 @@ async function main(): Promise<void> {
       sandbox: config.sandbox,
       security: config.security,
       auth: config.auth,
+      experimental: config.experimental,
       auditLogger
     });
     installShutdownHandlers(async () => {
@@ -45,6 +46,7 @@ async function main(): Promise<void> {
     sandbox: config.sandbox,
     security: config.security,
     auth: config.auth,
+    experimental: config.experimental,
     auditLogger
   });
   console.error(

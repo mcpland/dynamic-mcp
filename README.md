@@ -17,6 +17,7 @@ Unlike static MCP servers that define tools at compile time, dynamic-mcp lets AI
 - **Execution guard** — Global concurrency and per-scope rate limiting to prevent abuse
 - **JWT authentication** — Optional JWKS-based token verification for HTTP mode
 - **Audit logging** — Structured JSONL logs with rotation, redaction of sensitive fields, and shutdown flush
+- **Experimental upstream attach** — Optional feature-flagged `upstream.mcp.attach` for lazy discovery of existing MCP servers
 - **Two profiles** — `mvp` (default) for core functionality, `enterprise` for long-lived sandbox sessions, metrics, and ops tools
 - **Production-ready** — Health probes, Prometheus metrics, graceful shutdown, Kubernetes manifests, Docker Compose baselines
 
@@ -268,6 +269,9 @@ MCP_AUTH_JWKS_URL=https://your-idp.example.com/.well-known/jwks.json
 MCP_AUTH_ISSUER=https://your-idp.example.com/
 MCP_AUTH_AUDIENCE=dynamic-mcp
 MCP_AUTH_REQUIRED_SCOPES=mcp.invoke
+# Optional experimental feature (enterprise only)
+MCP_EXPERIMENTAL_UPSTREAM_MCP_ATTACH=false
+MCP_EXPERIMENTAL_UPSTREAM_MCP_ATTACH_MAX=8
 ```
 
 Full variable reference: [docs/configuration.md](docs/configuration.md)
@@ -323,6 +327,35 @@ Everything in MVP, plus:
 | `dynamic://service/runtime-config` | Config snapshot resource            |
 | `dynamic://service/meta`           | Service metadata resource           |
 | `tool-call-checklist`              | Reusable pre-call checklist prompt  |
+| `upstream.mcp.attach`              | Experimental upstream MCP attach*   |
+| `upstream.mcp.detach`              | Experimental upstream MCP detach*   |
+
+\* Registered only when `MCP_EXPERIMENTAL_UPSTREAM_MCP_ATTACH=true`.
+
+## Experimental Upstream MCP Attach
+
+Enable with feature flag (enterprise profile only):
+
+```bash
+MCP_PROFILE=enterprise
+MCP_EXPERIMENTAL_UPSTREAM_MCP_ATTACH=true
+MCP_EXPERIMENTAL_UPSTREAM_MCP_ATTACH_MAX=8
+MCP_ADMIN_TOKEN=change-me
+```
+
+This registers `upstream.mcp.attach` and `upstream.mcp.detach`. `attach` can connect to an existing MCP server (`stdio` or `http`) and return its current `listTools` output.
+
+Current scope is intentionally narrow:
+
+- Supported: attach + tool discovery
+- Supported: attach + detach + tool discovery
+- Not yet supported: runtime mount/unmount/proxy of upstream tools into dynamic-mcp tool namespace
+
+Security boundary:
+
+- `transport=stdio` can spawn local processes; treat it as privileged
+- `MCP_ADMIN_TOKEN` is required when this feature flag is enabled
+- Pair with `MCP_REQUIRE_ADMIN_TOKEN=true` and `MCP_ADMIN_TOKEN=...`
 
 ## Example: Creating a Dynamic Tool
 
