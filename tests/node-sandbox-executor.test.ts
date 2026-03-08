@@ -35,6 +35,9 @@ describe('NodeSandboxDynamicToolExecutionEngine', () => {
         greeting: 'hello world'
       }
     });
+    expect(result.content[0]?.type).toBe('text');
+    expect((result.content[0] as { text: string }).text).toContain('Result:');
+    expect((result.content[0] as { text: string }).text).toContain('"greeting": "hello world"');
   });
 
   it('rejects dependency installation in node sandbox mode', async () => {

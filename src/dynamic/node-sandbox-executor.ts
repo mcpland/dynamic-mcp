@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import type { DynamicToolExecutionEngine } from './executor.js';
+import { clipText, formatToolSuccessText, type DynamicToolExecutionEngine } from './executor.js';
 import type { DynamicToolRecord } from './spec.js';
 
 const execFileAsync = promisify(execFile);
@@ -96,7 +96,12 @@ export class NodeSandboxDynamicToolExecutionEngine implements DynamicToolExecuti
         content: [
           {
             type: 'text',
-            text: [`Dynamic tool succeeded: ${tool.name}`, `Duration: ${durationMs}ms`].join('\n')
+            text: formatToolSuccessText(
+              tool.name,
+              durationMs,
+              parsed.result,
+              this.options.maxOutputBytes
+            )
           }
         ],
         structuredContent: {
@@ -239,15 +244,6 @@ function parseResult(output: string):
   } catch {
     return null;
   }
-}
-
-function clipText(text: string, maxBytes: number): string {
-  if (Buffer.byteLength(text, 'utf8') <= maxBytes) {
-    return text;
-  }
-
-  const buffer = Buffer.from(text, 'utf8');
-  return `${buffer.subarray(0, maxBytes).toString('utf8')}\n...<truncated>`;
 }
 
 function buildNodeSandboxEnv(argsB64: string): NodeJS.ProcessEnv {
