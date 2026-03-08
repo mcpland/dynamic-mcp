@@ -94,6 +94,12 @@ Execution backend can be controlled with `MCP_EXECUTION_ENGINE` / `--execution-e
 - `docker`: force Docker
 - `node`: force Node sandbox (no dynamic dependency installation)
 
+If Docker is not installed and you want the MCP server to default to Node immediately, set `MCP_EXECUTION_ENGINE=node` in the client config or append `--execution-engine node` to the launch command:
+
+```bash
+npx -y dynamic-mcp --transport stdio --profile mvp --execution-engine node
+```
+
 ### 2. Claude Desktop (Local stdio)
 
 Claude Desktop uses a local `claude_desktop_config.json` file with `mcpServers`.
@@ -129,6 +135,31 @@ Example:
 }
 ```
 
+If Docker is not installed, configure the server to use Node explicitly:
+
+```json
+{
+  "mcpServers": {
+    "dynamic-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "dynamic-mcp",
+        "--transport",
+        "stdio",
+        "--profile",
+        "mvp"
+      ],
+      "env": {
+        "MCP_DYNAMIC_BACKEND": "file",
+        "MCP_DYNAMIC_STORE": "/ABS/PATH/TO/dynamic-mcp/.dynamic-mcp/tools.json",
+        "MCP_EXECUTION_ENGINE": "node"
+      }
+    }
+  }
+}
+```
+
 Note: Claude Desktop remote MCP server management is done in app settings (`Settings -> Connectors`), not in `claude_desktop_config.json`.
 
 ### 3. Claude Code
@@ -137,6 +168,12 @@ Add local stdio server:
 
 ```bash
 claude mcp add dynamic-mcp -- npx -y dynamic-mcp --transport stdio --profile mvp
+```
+
+If Docker is not installed:
+
+```bash
+claude mcp add dynamic-mcp -- npx -y dynamic-mcp --transport stdio --profile mvp --execution-engine node
 ```
 
 Add remote HTTP server:
@@ -170,6 +207,8 @@ Project-level `.mcp.json` example (supports both local and remote server definit
 }
 ```
 
+If Docker is not installed, add `"env": { "MCP_EXECUTION_ENGINE": "node" }` to the local server entry or append `"--execution-engine", "node"` to its `args`.
+
 Claude Code supports environment variable expansion in config values, including `${VAR}` and `${VAR:-default}`.
 
 ### 4. VS Code
@@ -194,6 +233,30 @@ Local stdio example:
       "env": {
         "MCP_DYNAMIC_BACKEND": "file",
         "MCP_SANDBOX_DOCKER_BIN": "docker"
+      }
+    }
+  }
+}
+```
+
+If Docker is not installed, set the execution engine to Node:
+
+```json
+{
+  "servers": {
+    "dynamic-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "dynamic-mcp",
+        "--transport",
+        "stdio",
+        "--profile",
+        "mvp"
+      ],
+      "env": {
+        "MCP_DYNAMIC_BACKEND": "file",
+        "MCP_EXECUTION_ENGINE": "node"
       }
     }
   }
